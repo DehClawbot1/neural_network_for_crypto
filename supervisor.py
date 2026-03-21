@@ -40,17 +40,35 @@ def load_brain(model_path="weights/ppo_polytrader"):
         return None
 
 
-def prepare_observation(feature_row):
+def prepare_observation(feature_row, legacy=False):
     """
-    Converts feature-engine output into the 4-value normalized array for the RL Brain.
-    Expected State: [trader_win_rate, normalized_trade_size, current_price, time_left]
+    Converts grouped feature-engine output into the observation vector for the RL Brain.
+    Supports a legacy 4-feature fallback for older saved models.
     """
+    if legacy:
+        obs = np.array(
+            [
+                float(feature_row.get("trader_win_rate", 0.5)),
+                float(feature_row.get("normalized_trade_size", 0.5)),
+                float(feature_row.get("current_price", 0.5)),
+                float(feature_row.get("time_left", 0.5)),
+            ],
+            dtype=np.float32,
+        )
+        return obs
+
     obs = np.array(
         [
             float(feature_row.get("trader_win_rate", 0.5)),
             float(feature_row.get("normalized_trade_size", 0.5)),
             float(feature_row.get("current_price", 0.5)),
             float(feature_row.get("time_left", 0.5)),
+            float(feature_row.get("liquidity_score", 0.5)),
+            float(feature_row.get("volume_score", 0.5)),
+            float(feature_row.get("probability_momentum", 0.5)),
+            float(feature_row.get("volatility_score", 0.5)),
+            float(feature_row.get("whale_pressure", 0.5)),
+            float(feature_row.get("market_structure_score", 0.5)),
         ],
         dtype=np.float32,
     )
@@ -72,6 +90,18 @@ def log_ranked_signal(signal_row):
         "confidence": signal_row.get("confidence", 0.0),
         "reason": signal_row.get("reason", ""),
         "market_url": signal_row.get("market_url"),
+        "trader_win_rate": signal_row.get("trader_win_rate"),
+        "normalized_trade_size": signal_row.get("normalized_trade_size"),
+        "current_price": signal_row.get("current_price"),
+        "time_left": signal_row.get("time_left"),
+        "liquidity_score": signal_row.get("liquidity_score"),
+        "volume_score": signal_row.get("volume_score"),
+        "probability_momentum": signal_row.get("probability_momentum"),
+        "volatility_score": signal_row.get("volatility_score"),
+        "whale_pressure": signal_row.get("whale_pressure"),
+        "market_structure_score": signal_row.get("market_structure_score"),
+        "volatility_risk": signal_row.get("volatility_risk"),
+        "time_decay_score": signal_row.get("time_decay_score"),
     }
     append_csv_record(SIGNALS_FILE, record)
 
@@ -194,7 +224,13 @@ def main_loop():
                 signal_row = row.to_dict()
                 obs = prepare_observation(signal_row)
 
-                action, _states = brain.predict(obs, deterministic=True)
+                try:
+                    action, _states = brain.predict(obs, deterministic=True)
+                except Exception:
+                    # Backward-compatible fallback for older 4-feature models
+                    legacy_obs = prepare_observation(signal_row, legacy=True)
+                    action, _states = brain.predict(legacy_obs, deterministic=True)
+
                 action_val = int(action.item() if hasattr(action, "item") else action[0])
 
                 execute_paper_trade(action_val, signal_row)
