@@ -12,6 +12,9 @@ from feature_builder import FeatureBuilder
 from signal_engine import SignalEngine
 from whale_tracker import WhaleTracker
 from alerts_engine import AlertsEngine
+from trader_analytics import TraderAnalytics
+from historical_dataset_builder import HistoricalDatasetBuilder
+from backtester import StrategyBacktester
 
 # Configure logging for zero-intervention monitoring
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -126,6 +129,9 @@ def main_loop():
     signal_engine = SignalEngine()
     whale_tracker = WhaleTracker()
     alerts_engine = AlertsEngine()
+    trader_analytics = TraderAnalytics()
+    dataset_builder = HistoricalDatasetBuilder()
+    backtester = StrategyBacktester()
     previous_markets_df = None
 
     while True:
@@ -186,6 +192,12 @@ def main_loop():
                 action_val = int(action.item() if hasattr(action, "item") else action[0])
 
                 execute_paper_trade(action_val, signal_row)
+
+            # 5. Phase 2 analytics outputs
+            trades_df = pd.read_csv(SUMMARY_FILE) if os.path.exists(SUMMARY_FILE) else pd.DataFrame()
+            trader_analytics.write(scored_df.rename(columns={"trader_wallet": "wallet_copied", "market_title": "market"}), trades_df)
+            backtester.write(scored_df.rename(columns={"trader_wallet": "wallet_copied", "market_title": "market"}))
+            dataset_builder.write()
 
             logging.info("Cycle complete. Sleeping for 60 seconds...")
             time.sleep(60)
