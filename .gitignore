@@ -1,5 +1,6 @@
 .env
 private_keys.json
 __pycache__/
+*.pyc
 *.zip
 weights/
