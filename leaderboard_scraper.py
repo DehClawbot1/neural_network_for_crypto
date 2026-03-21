@@ -92,3 +92,11 @@ def run_scraper_cycle():
     else:
         logging.info("No relevant BTC trade signals found in this cycle.")
         return pd.DataFrame()
+
+
+if __name__ == "__main__":
+    # Execute a test run when you run this file directly
+    signals_df = run_scraper_cycle()
+    if not signals_df.empty:
+        print("\n--- Latest Alpha Signals ---")
+        print(signals_df[["trader_wallet", "side", "price", "size", "market_title"]].head())
