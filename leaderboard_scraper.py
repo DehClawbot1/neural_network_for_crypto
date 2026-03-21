@@ -7,7 +7,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def get_top_crypto_traders(limit=5):
+def get_top_crypto_traders(limit=50):
     """Fetches the top proxy wallets by PnL in the CRYPTO category for the week."""
     url = "https://data-api.polymarket.com/v1/leaderboard"
     params = {
@@ -72,7 +72,7 @@ def get_recent_btc_trades(wallet_address, limit=15):
 def run_scraper_cycle():
     """Main execution loop to pull the latest Alpha Signals."""
     logging.info("Starting Alpha Signal Scraper cycle...")
-    top_traders = get_top_crypto_traders(limit=5)
+    top_traders = get_top_crypto_traders(limit=50)
 
     all_signals = []
     for trader in top_traders:
