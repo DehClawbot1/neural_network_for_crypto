@@ -1,17 +1,38 @@
-# Neural Network for Crypto
+# Neural Network for Crypto: PolyMarket Paper-Trader
 
-Self-learning Polymarket copy-trader built around PolyMarket signals. This repository hosts the workspace, environments, RL brain, execution logic, and automation scripts for the PolyTrade agent.
+This repository contains an autonomous, Reinforcement Learning (RL) powered copy-trading bot designed for PolyMarket.
 
-## Get the code on your PC
+Currently configured for **Paper-Trading Only**, the bot uses a Proximal Policy Optimization (PPO) neural network to filter and evaluate trade signals from the most profitable crypto traders on the platform, simulating executions to forward-test its accuracy without risking live capital.
 
-### 1) Clone the repository
+## 🧠 System Architecture
+
+The pipeline consists of five core components working in sequence:
+
+1. **`api_setup.py` (The Validator)**  
+   Validates the local `.env` configuration to ensure the bot is strictly locked into paper-trading mode. Generates a safe template if one does not exist.
+
+2. **`leaderboard_scraper.py` (The Eyes)**  
+   Polls the PolyMarket Data API to identify the Top 5 most profitable traders in the `CRYPTO` category. It then scans their on-chain activity for recent bets specifically on Bitcoin (BTC) price markets.
+
+3. **`polytrade_env.py` (The Logic)**  
+   A custom `gymnasium` environment. It defines how the bot perceives incoming signals (Trader Win Rate, Trade Size, Price, Time Left) and maps out the possible actions (Ignore, Follow Small, Follow Large).
+
+4. **`rl_trainer.py` (The Trainer)**  
+   Utilizes `stable-baselines3` to train the PPO model within the custom environment. It learns to maximize simulated profit by penalizing bad copy-trades and rewarding successful ones, saving its brain to `weights/ppo_polytrader.zip`.
+
+5. **`supervisor.py` (The Heartbeat)**  
+   The continuous autonomous loop. It scrapes live signals, feeds them through the trained RL model for a decision, and logs hypothetical fills, including simulated slippage, to a CSV ledger in `logs/daily_summary.txt`.
+
+## 🚀 Installation & Setup
+
+### 1) Get the code
 
 ```bash
 git clone https://github.com/DehClawbot1/neural_network_for_crypto.git
 cd neural_network_for_crypto
 ```
 
-### 2) Create a Python virtual environment
+### 2) Create a virtual environment
 
 **Windows PowerShell**
 
@@ -29,90 +50,92 @@ python -m venv .venv
 
 ### 3) Install dependencies
 
+Ensure you have Python 3.9+ installed, then run:
+
 ```bash
 pip install -r requirements.txt
 ```
 
-## Configure secrets
+### 4) Initialize the environment
 
-Create a `.env` file in the project root.
-
-Example:
-
-```env
-POLYMARKET_PRIVATE_KEY=your_level_1_private_key_here
-POLYMARKET_API_KEY=
-POLYMARKET_API_SECRET=
-POLYMARKET_API_PASSPHRASE=
-POLYMARKET_CHAIN_ID=137
-```
-
-Notes:
-- `.env` is ignored by git and stays local on your PC.
-- `private_keys.json` is also ignored.
-- API key, secret, and passphrase can be derived by a setup script later.
-
-## How to run
-
-The full trading stack is still being scaffolded. Once the scripts are added, the expected flow will be:
-
-### Run the setup/bootstrap step
+Run the setup script to generate your secure paper-trading configuration:
 
 ```bash
-python setup_api.py
+python api_setup.py
 ```
 
-This will:
-- read your Level 1 private key
-- derive Level 2 API credentials
-- store them for runtime use
+This will create a `.env` file with simulated starting balances.
 
-### Run the bot supervisor
+**Do not add live L1/L2 keys to this file.**
+
+## 🤖 Execution Guide
+
+To run the full paper-trading simulation, execute the following steps in order.
+
+### Step 1: Train the neural network
+
+Generate the initial weights for the bot's decision engine:
+
+```bash
+python rl_trainer.py
+```
+
+This creates:
+- `weights/ppo_polytrader.zip`
+
+### Step 2: Start the autonomous supervisor
+
+Launch the zero-intervention observation and execution loop:
 
 ```bash
 python supervisor.py
 ```
 
-Expected supervisor loop:
-- fetch signals
-- consult RL model
-- place or skip trades
-- track resolutions
-- retrain model
-- save weights into `weights/`
-- update `daily_summary.txt`
+### Step 3: Monitor performance
 
-## Project structure
+Check the paper-trading ledger:
 
-Planned structure:
+```text
+logs/daily_summary.txt
+```
+
+This file records mock fills, simulated slippage, and the bot's paper-trading activity.
+
+## 📁 Repository Structure
 
 ```text
 neural_network_for_crypto/
 ├── README.md
 ├── requirements.txt
 ├── .gitignore
-├── .env
-├── weights/
-├── setup_api.py
-├── alpha_signal_scraper.py
-├── main_bot.py
+├── .env                 # generated locally, ignored by git
+├── api_setup.py
+├── leaderboard_scraper.py
+├── polytrade_env.py
+├── rl_trainer.py
 ├── supervisor.py
-└── daily_summary.txt
+├── logs/
+│   └── daily_summary.txt
+└── weights/
+    └── ppo_polytrader.zip
 ```
 
-## Update the code later
+## 🔒 Safety Notes
 
-To pull the latest version on your PC:
+- This project is configured for **paper trading only**.
+- Live API credentials are not required for the current architecture.
+- `api_setup.py` warns if live trading keys are present.
+- `supervisor.py` does **not** place real trades.
+- All executions are simulated and logged locally.
 
-```bash
-git pull origin main
-```
+## ✅ Current Status
 
-## Current status
+The repository now includes:
+- live signal scraping from PolyMarket data endpoints
+- a custom Gymnasium environment
+- PPO training via Stable Baselines3
+- a paper-trading supervisor loop
+- safe `.env` validation for simulation mode
+- local logging for forward-testing
 
-Right now this repository contains the initial scaffold:
-- README
-- gitignore
-- requirements
-
-The trading logic, RL environment, execution engine, and supervisor loop are the next pieces being built.
+This is a forward-testing and simulation architecture intended to validate behavior safely before any discussion of real capital or live execution.
