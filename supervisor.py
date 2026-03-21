@@ -150,15 +150,19 @@ def main_loop():
             # 3. Log top-ranked paper opportunities (research output, not betting advice)
             top_n = min(5, len(scored_df))
             logging.info("Top %s paper-trading opportunities this cycle:", top_n)
-            for _, ranked_row in scored_df.head(top_n).iterrows():
-                logging.info(
-                    " - %s | %s | confidence=%.2f | %s",
-                    ranked_row.get("signal_label"),
-                    ranked_row.get("market_title"),
-                    float(ranked_row.get("confidence", 0.0)),
-                    ranked_row.get("reason"),
+            print("\n=== TOP PAPER-TRADING OPPORTUNITIES ===")
+            for rank, (_, ranked_row) in enumerate(scored_df.head(top_n).iterrows(), start=1):
+                summary_line = (
+                    f"{rank}. {ranked_row.get('signal_label')} | "
+                    f"confidence={float(ranked_row.get('confidence', 0.0)):.2f} | "
+                    f"market={ranked_row.get('market_title')} | "
+                    f"side={ranked_row.get('side')}"
                 )
+                logging.info(" - %s", summary_line)
+                print(summary_line)
+                print(f"   reason: {ranked_row.get('reason')}")
                 log_ranked_signal(ranked_row.to_dict())
+            print("======================================\n")
 
             # 4. Evaluate scored rows with RL model, then simulate paper execution only
             for _, row in scored_df.iterrows():

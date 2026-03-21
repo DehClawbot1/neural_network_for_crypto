@@ -21,7 +21,16 @@ The pipeline consists of five core components working in sequence:
    Utilizes `stable-baselines3` to train the PPO model within the custom environment. It learns to maximize simulated profit by penalizing bad copy-trades and rewarding successful ones, saving its brain to `weights/ppo_polytrader.zip`.
 
 5. **`supervisor.py` (The Heartbeat)**  
-   The continuous autonomous loop. It scrapes live signals, feeds them through the trained RL model for a decision, and logs hypothetical fills, including simulated slippage, to a CSV ledger in `logs/daily_summary.txt`.
+   The continuous autonomous loop. It scrapes live signals, enriches them with market context, ranks paper-trading opportunities, feeds normalized features through the trained RL model, and logs hypothetical fills, including simulated slippage, to `logs/daily_summary.txt`.
+
+6. **`market_monitor.py` (The Market Context Layer)**  
+   Fetches public Polymarket market data and filters BTC-related markets for real-time research context.
+
+7. **`feature_builder.py` (The Feature Layer)**  
+   Merges scraped signals with market context and builds normalized features for scoring and paper-trading evaluation.
+
+8. **`signal_engine.py` (The Ranking Layer)**  
+   Scores each candidate into safe research labels such as `IGNORE`, `WATCH`, `PAPER_SMALL`, and `PAPER_LARGE`, with confidence and reason text.
 
 ## 🚀 Installation & Setup
 
@@ -91,15 +100,24 @@ Launch the zero-intervention observation and execution loop:
 python supervisor.py
 ```
 
-### Step 3: Monitor performance
+During each cycle, the supervisor will:
+- fetch BTC-related market context
+- scrape public wallet activity
+- build normalized features
+- rank the top paper-trading opportunities
+- simulate paper fills
 
-Check the paper-trading ledger:
+### Step 3: Monitor performance and opportunities
+
+Check these output files:
 
 ```text
 logs/daily_summary.txt
+logs/signals.csv
 ```
 
-This file records mock fills, simulated slippage, and the bot's paper-trading activity.
+- `logs/daily_summary.txt` records mock fills and simulated slippage
+- `logs/signals.csv` records ranked opportunities, confidence, and reason strings
 
 ## 📁 Repository Structure
 
@@ -111,11 +129,15 @@ neural_network_for_crypto/
 ├── .env                 # generated locally, ignored by git
 ├── api_setup.py
 ├── leaderboard_scraper.py
+├── market_monitor.py
+├── feature_builder.py
+├── signal_engine.py
 ├── polytrade_env.py
 ├── rl_trainer.py
 ├── supervisor.py
 ├── logs/
-│   └── daily_summary.txt
+│   ├── daily_summary.txt
+│   └── signals.csv
 └── weights/
     └── ppo_polytrader.zip
 ```
@@ -132,6 +154,9 @@ neural_network_for_crypto/
 
 The repository now includes:
 - live signal scraping from PolyMarket data endpoints
+- BTC market context monitoring
+- feature building for real-time research
+- confidence-ranked paper-trading opportunities
 - a custom Gymnasium environment
 - PPO training via Stable Baselines3
 - a paper-trading supervisor loop
