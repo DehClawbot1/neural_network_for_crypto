@@ -245,9 +245,9 @@ def render_trade_chart(trades_df):
 def render_raw_data(signals_df, trades_df):
     with st.expander("Raw data"):
         st.markdown("**Signals CSV**")
-        st.dataframe(signals_df, use_container_width=True)
+        st.dataframe(signals_df, width="stretch")
         st.markdown("**Paper Trade Ledger**")
-        st.dataframe(trades_df, use_container_width=True)
+        st.dataframe(trades_df, width="stretch")
 
 
 def main():
