@@ -1,0 +1,5 @@
+.env
+private_keys.json
+__pycache__/
+*.zip
+weights/

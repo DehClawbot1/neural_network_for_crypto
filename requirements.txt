@@ -1,0 +1,5 @@
+py-clob-client
+stable-baselines3
+gymnasium
+pandas
+python-dotenv
