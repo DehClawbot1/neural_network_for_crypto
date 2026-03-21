@@ -92,9 +92,23 @@ python rl_trainer.py
 This creates:
 - `weights/ppo_polytrader.zip`
 
-### Step 2: Start the autonomous supervisor
+### Step 2: Start the bot the easy way
 
-Launch the zero-intervention observation and execution loop:
+Use the launcher:
+
+```bash
+python run_bot.py
+```
+
+This will:
+- validate `.env`
+- check for model weights
+- run a bootstrap training pass if needed
+- start the supervisor loop
+
+### Step 3: Start the autonomous supervisor manually (optional)
+
+If you want to launch the loop directly:
 
 ```bash
 python supervisor.py
@@ -107,7 +121,7 @@ During each cycle, the supervisor will:
 - rank the top paper-trading opportunities
 - simulate paper fills
 
-### Step 3: Monitor performance and opportunities
+### Step 4: Monitor performance and opportunities
 
 You can inspect the raw output files directly:
 
@@ -119,7 +133,7 @@ logs/signals.csv
 - `logs/daily_summary.txt` records mock fills and simulated slippage
 - `logs/signals.csv` records ranked opportunities, confidence, and reason strings
 
-### Step 4: Open the browser dashboard
+### Step 5: Open the browser dashboard
 
 Run:
 
@@ -143,6 +157,7 @@ neural_network_for_crypto/
 ├── .env                 # generated locally, ignored by git
 ├── api_setup.py
 ├── dashboard.py
+├── run_bot.py
 ├── leaderboard_scraper.py
 ├── market_monitor.py
 ├── feature_builder.py
