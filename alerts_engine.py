@@ -1,5 +1,7 @@
 import logging
+import uuid
 from pathlib import Path
+from datetime import datetime
 
 import pandas as pd
 
@@ -18,8 +20,38 @@ class AlertsEngine:
         self.alerts_file = self.logs_dir / "alerts.csv"
         self.probability_move_threshold = probability_move_threshold
 
+    def _normalize_alert(self, record: dict):
+        alert_type = str(record.get("alert_type", "UNKNOWN"))
+        severity = record.get("severity")
+        if severity is None:
+            if alert_type == "PROBABILITY_MOVE":
+                severity = "warning"
+            elif alert_type == "WHALE_CLUSTER":
+                severity = "info"
+            else:
+                severity = "info"
+        message = record.get("message")
+        if not message:
+            if alert_type == "PROBABILITY_MOVE":
+                message = f"Probability moved from {record.get('previous_price')} to {record.get('current_price')}"
+            elif alert_type == "WHALE_CLUSTER":
+                message = f"{record.get('unique_wallets', 0)} wallets clustered in {record.get('market', 'unknown market')}"
+            else:
+                message = alert_type
+        normalized = {
+            "alert_id": record.get("alert_id", str(uuid.uuid4())),
+            "timestamp": record.get("timestamp", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")),
+            "alert_type": alert_type,
+            "severity": severity,
+            "status": record.get("status", "open"),
+            "source_module": record.get("source_module", "alerts_engine"),
+            "message": message,
+        }
+        normalized.update(record)
+        return normalized
+
     def _append_alert(self, record: dict):
-        df = pd.DataFrame([record])
+        df = pd.DataFrame([self._normalize_alert(record)])
         df.to_csv(self.alerts_file, mode="a", header=not self.alerts_file.exists(), index=False)
 
     def detect_probability_moves(self, current_markets_df: pd.DataFrame, previous_markets_df: pd.DataFrame | None):
@@ -44,11 +76,15 @@ class AlertsEngine:
                 alerts.append(
                     {
                         "alert_type": "PROBABILITY_MOVE",
+                        "severity": "warning" if abs(move) < (self.probability_move_threshold * 2) else "critical",
+                        "status": "open",
+                        "source_module": "alerts_engine.probability_moves",
                         "market_id": market_id,
                         "market": row.get("question"),
                         "previous_price": prev_price,
                         "current_price": current_price,
                         "move": round(move, 4),
+                        "message": f"Market moved by {round(move, 4)} from {prev_price} to {current_price}",
                     }
                 )
         return alerts
@@ -66,9 +102,13 @@ class AlertsEngine:
                 alerts.append(
                     {
                         "alert_type": "WHALE_CLUSTER",
+                        "severity": "warning" if unique_wallets < 4 else "critical",
+                        "status": "open",
+                        "source_module": "alerts_engine.whale_cluster",
                         "market": market_title,
                         "unique_wallets": int(unique_wallets),
                         "signal_count": int(total_signals),
+                        "message": f"{int(unique_wallets)} wallets clustered with {int(total_signals)} signals",
                     }
                 )
         return alerts
