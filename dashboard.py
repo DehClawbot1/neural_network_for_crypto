@@ -160,7 +160,19 @@ def inject_styles():
     )
 
 
+def get_data_freshness(*paths):
+    timestamps = []
+    for path in paths:
+        p = Path(path)
+        if p.exists():
+            timestamps.append(datetime.fromtimestamp(p.stat().st_mtime))
+    if not timestamps:
+        return "unknown"
+    return max(timestamps).strftime('%Y-%m-%d %H:%M:%S')
+
+
 def render_header():
+    freshness = get_data_freshness(SIGNALS_FILE, MARKETS_FILE, ALERTS_FILE)
     st.markdown(
         f"""
         <div class="hero-box">
@@ -172,8 +184,8 @@ def render_header():
                     </div>
                 </div>
                 <div class="overview-card" style="min-width:240px; margin-bottom:0;">
-                    <div><span class="live-dot"></span><strong>Live</strong></div>
-                    <div class="small-muted">Last refresh: {datetime.now().strftime('%H:%M:%S')}</div>
+                    <div><span class="live-dot"></span><strong>Data freshness</strong></div>
+                    <div class="small-muted">Latest file update: {freshness}</div>
                 </div>
             </div>
         </div>
@@ -218,7 +230,10 @@ def render_overview(signals_df, trades_df, markets_df, alerts_df):
         st.metric("Recent Alerts", len(alerts_df))
         st.markdown('</div>', unsafe_allow_html=True)
 
-    st.caption(f"Highest confidence: {top_conf} | Last refresh: {datetime.now().strftime('%H:%M:%S')}")
+    latest_signal_ts = signals_df["timestamp"].dropna().iloc[-1] if (not signals_df.empty and "timestamp" in signals_df.columns and not signals_df["timestamp"].dropna().empty) else "-"
+    latest_market_ts = markets_df["timestamp"].dropna().iloc[-1] if (not markets_df.empty and "timestamp" in markets_df.columns and not markets_df["timestamp"].dropna().empty) else "-"
+    latest_alert_ts = alerts_df["timestamp"].dropna().iloc[-1] if (not alerts_df.empty and "timestamp" in alerts_df.columns and not alerts_df["timestamp"].dropna().empty) else "-"
+    st.caption(f"Highest confidence: {top_conf} | Signals: {latest_signal_ts} | Markets: {latest_market_ts} | Alerts: {latest_alert_ts}")
 
 
 def badge_class(label: str) -> str:
