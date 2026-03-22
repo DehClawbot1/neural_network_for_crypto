@@ -400,6 +400,64 @@ def render_best_trades(closed_positions_df, path_replay_df):
     st.dataframe(best_df[cols], width="stretch")
 
 
+def render_action_board(signals_df, positions_df):
+    st.markdown('<div class="section-title">Top 10 Entry / Hold / Leave Board</div>', unsafe_allow_html=True)
+    st.caption("Paper-trading action board only — not live execution advice.")
+    if signals_df.empty:
+        st.info("No ranked signals available yet.")
+        return
+
+    ranked = signals_df.copy()
+    sort_cols = [c for c in ["edge_score", "p_tp_before_sl", "confidence"] if c in ranked.columns]
+    if sort_cols:
+        ranked = ranked.sort_values(by=sort_cols, ascending=[False] * len(sort_cols))
+    ranked = ranked.head(10).copy()
+
+    open_markets = set()
+    if not positions_df.empty and "market" in positions_df.columns:
+        open_markets = set(positions_df["market"].dropna().astype(str).tolist())
+
+    rows = []
+    for _, row in ranked.iterrows():
+        market = row.get("market_title", row.get("market", "Unknown Market"))
+        confidence = float(row.get("confidence", 0.0) or 0.0)
+        p_tp = float(row.get("p_tp_before_sl", 0.0) or 0.0)
+        expected_return = float(row.get("expected_return", 0.0) or 0.0)
+        edge = float(row.get("edge_score", 0.0) or 0.0)
+        already_open = market in open_markets
+
+        if already_open and confidence < 0.50:
+            action = "LEAVE / EXIT PAPER POSITION"
+            alert = "🔴 Exit watch"
+        elif already_open:
+            action = "HOLD PAPER POSITION"
+            alert = "🟡 Hold / monitor"
+        elif p_tp >= 0.62 and edge > 0:
+            action = "ENTER PAPER POSITION"
+            alert = "🟢 Entry alert"
+        else:
+            action = "WATCH ONLY"
+            alert = "⚪ No entry yet"
+
+        rows.append(
+            {
+                "market": market,
+                "side": row.get("side"),
+                "signal": row.get("signal_label"),
+                "p_tp_before_sl": round(p_tp, 3),
+                "expected_return": round(expected_return, 4),
+                "edge_score": round(edge, 4),
+                "confidence": round(confidence, 3),
+                "action": action,
+                "alert": alert,
+                "link": row.get("market_url"),
+            }
+        )
+
+    board_df = pd.DataFrame(rows)
+    st.dataframe(board_df, width="stretch")
+
+
 def render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df):
     st.markdown('<div class="section-title">Model / Learning Status</div>', unsafe_allow_html=True)
     weights_status = "🟢 current" if WEIGHTS_FILE.exists() else "🔴 missing"
@@ -511,6 +569,7 @@ def main():
         with top_right:
             render_factor_matrix(signals_df)
 
+        render_action_board(signals_df, positions_df)
         render_positions(positions_df, closed_positions_df)
         render_best_trades(closed_positions_df, path_replay_df)
         bottom_left, bottom_right = st.columns([1, 1])
