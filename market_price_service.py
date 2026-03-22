@@ -150,7 +150,6 @@ class MarketPriceService:
             await ws.send(json.dumps({
                 "assets_ids": [str(t) for t in token_ids if t],
                 "type": "market",
-                "custom_feature_enabled": True,
             }))
 
             while True:
