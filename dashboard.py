@@ -527,6 +527,32 @@ def render_top_opportunities(signals_df):
         st.warning("No ranked opportunities yet. Run supervisor.py first.")
         return
 
+    def fmt_pct(value):
+        try:
+            if pd.isna(value):
+                return "N/A"
+            return f"{float(value) * 100:.1f}%"
+        except Exception:
+            return "N/A"
+
+    def fmt_num(value, digits=4):
+        try:
+            if pd.isna(value):
+                return "N/A"
+            return f"{float(value):.{digits}f}"
+        except Exception:
+            return "N/A"
+
+    def action_badge(action):
+        action = str(action).strip().lower()
+        if action in ["enter", "open_long", "buy"]:
+            return "🟢 ENTER"
+        if action in ["hold", "watch", "monitor"]:
+            return "🟡 HOLD/WATCH"
+        if action in ["leave", "exit", "close", "sell"]:
+            return "🔴 LEAVE/EXIT"
+        return "⚪ IGNORE"
+
     sort_df = signals_df.copy()
     if "confidence" in sort_df.columns:
         sort_df = sort_df.sort_values(by="confidence", ascending=False)
@@ -537,18 +563,30 @@ def render_top_opportunities(signals_df):
     for idx, (_, row) in enumerate(top_df.iterrows()):
         with cols[idx % 2]:
             label = row.get("signal_label", "UNKNOWN")
-            side = row.get("side", "UNKNOWN")
-            market = row.get("market", row.get("market_title", "Unknown Market"))
-            wallet = row.get("wallet_copied", row.get("trader_wallet", "Unknown"))
-            confidence = row.get("confidence", "-")
-            reason = row.get("reason", "No reason available")
-            market_url = row.get("market_url")
+            side = row.get("outcome_side", row.get("side", "UNKNOWN"))
+            market = row.get("market_title", row.get("market", "Unknown Market"))
+            wallet = row.get("wallet_copied", row.get("trader_wallet", "N/A"))
+            confidence = row.get("confidence")
+            edge_score = row.get("edge_score")
+            expected_return = row.get("expected_return")
+            current_price = row.get("market_last_trade_price", row.get("current_price"))
+            action = row.get("recommended_action", row.get("action", row.get("entry_intent", "ignore")))
+            reason = row.get("reason_summary", row.get("reason", "N/A"))
+            freshness_ts = row.get("timestamp", row.get("updated_at", "N/A"))
+            market_url = row.get("market_url", row.get("url"))
+            missing_scores = []
+            if pd.isna(confidence):
+                missing_scores.append("confidence")
+            if pd.isna(edge_score):
+                missing_scores.append("edge")
+            if pd.isna(expected_return):
+                missing_scores.append("expected return")
 
-            conf_pct = 0
+            conf_for_bar = 0
             try:
-                conf_pct = max(0, min(100, int(float(confidence) * 100)))
+                conf_for_bar = max(0, min(100, int(float(confidence) * 100))) if not pd.isna(confidence) else 0
             except Exception:
-                conf_pct = 0
+                conf_for_bar = 0
 
             st.markdown(
                 f"""
@@ -556,18 +594,26 @@ def render_top_opportunities(signals_df):
                     <div class="market-title">{market}</div>
                     <div>
                         <span class="signal-badge {badge_class(label)}">{label}</span>
-                        <span class="signal-badge badge-ignore">Observed side: {side}</span>
+                        <span class="signal-badge badge-ignore">Side: {side}</span>
+                        <span class="signal-badge badge-watch">{action_badge(action)}</span>
                     </div>
-                    <div class="small-muted">Confidence score: {conf_pct}%</div>
+                    <div class="small-muted">Confidence: {fmt_pct(confidence)}</div>
                     <div class="confidence-bar-wrap">
-                        <div class="confidence-bar-fill" style="width:{conf_pct}%;"></div>
+                        <div class="confidence-bar-fill" style="width:{conf_for_bar}%;"></div>
                     </div>
-                    <div class="meta-line"><b>Source wallet:</b> {wallet}</div>
+                    <div class="meta-line"><b>Edge score:</b> {fmt_num(edge_score)}</div>
+                    <div class="meta-line"><b>Expected return:</b> {fmt_num(expected_return)}</div>
+                    <div class="meta-line"><b>Wallet source:</b> {wallet}</div>
+                    <div class="meta-line"><b>Current market price:</b> {fmt_num(current_price)}</div>
+                    <div class="meta-line"><b>Recommended action:</b> {action_badge(action)}</div>
+                    <div class="meta-line"><b>Freshness:</b> {freshness_ts if pd.notna(freshness_ts) else 'N/A'}</div>
                     <div class="reason-box">{reason}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+            if missing_scores:
+                st.caption(f"⚠ Missing score data: {', '.join(missing_scores)}")
             if pd.notna(market_url) and market_url:
                 st.link_button("Open market on Polymarket", market_url, width="stretch")
 
