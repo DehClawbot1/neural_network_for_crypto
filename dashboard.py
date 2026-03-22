@@ -741,14 +741,38 @@ def render_market_tracker(markets_df):
     c3.metric("Highest Volume Market", highest_volume_market)
     c4.metric("Price-updated Recently", recently_updated)
 
-    st.dataframe(view[[c for c in [market_col, price_col, "liquidity", "volume", "url"] if c and c in view.columns]], width="stretch", hide_index=True)
+    table_cols = [c for c in [market_col, price_col, "liquidity", "volume", "market_id", "url", "updated_at", "timestamp"] if c and c in view.columns]
+    st.dataframe(view[table_cols], width="stretch", hide_index=True)
 
-    if price_col and market_col:
-        chart_df = view.dropna(subset=[price_col]).head(12)
-        if not chart_df.empty:
-            fig = px.bar(chart_df, x=price_col, y=market_col, orientation="h", title="Current BTC Market Prices")
-            fig.update_layout(height=420, yaxis={"categoryorder": "total ascending"})
-            st.plotly_chart(fig, width="stretch")
+    if market_col and "liquidity" in view.columns:
+        liq_df = view.dropna(subset=[market_col]).copy().head(12)
+        liq_df["liquidity"] = pd.to_numeric(liq_df["liquidity"], errors="coerce")
+        liq_df = liq_df.dropna(subset=["liquidity"]).sort_values("liquidity", ascending=False).head(12)
+        if not liq_df.empty:
+            st.plotly_chart(px.bar(liq_df, x="liquidity", y=market_col, orientation="h", title="Top Markets by Liquidity"), width="stretch")
+
+    if market_col and "volume" in view.columns:
+        vol_df = view.dropna(subset=[market_col]).copy()
+        vol_df["volume"] = pd.to_numeric(vol_df["volume"], errors="coerce")
+        vol_df = vol_df.dropna(subset=["volume"]).sort_values("volume", ascending=False).head(12)
+        if not vol_df.empty:
+            st.plotly_chart(px.bar(vol_df, x="volume", y=market_col, orientation="h", title="Top Markets by Volume"), width="stretch")
+
+    if price_col:
+        price_df = view.copy()
+        price_df[price_col] = pd.to_numeric(price_df[price_col], errors="coerce")
+        price_df = price_df.dropna(subset=[price_col])
+        if not price_df.empty:
+            st.plotly_chart(px.histogram(price_df, x=price_col, nbins=20, title="Last Trade Price Distribution"), width="stretch")
+
+    time_col = "updated_at" if "updated_at" in view.columns else "timestamp" if "timestamp" in view.columns else None
+    if time_col:
+        timeline = view.copy()
+        timeline[time_col] = pd.to_datetime(timeline[time_col], errors="coerce")
+        timeline = timeline.dropna(subset=[time_col])
+        if not timeline.empty:
+            counts = timeline.groupby(timeline[time_col].dt.floor("H")).size().reset_index(name="tracked_market_count")
+            st.plotly_chart(px.line(counts, x=time_col, y="tracked_market_count", title="Tracked Market Count Over Time"), width="stretch")
 
 
 def render_whale_tracker(whales_df):
