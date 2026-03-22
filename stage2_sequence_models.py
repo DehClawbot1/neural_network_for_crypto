@@ -31,6 +31,18 @@ class SequenceGRU(nn.Module):
         return self.head(last)
 
 
+class WeightedBCELoss(nn.Module):
+    def forward(self, logits, targets, sample_weights):
+        base = nn.functional.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+        return (base * sample_weights).mean()
+
+
+class WeightedMSELoss(nn.Module):
+    def forward(self, preds, targets, sample_weights):
+        base = (preds - targets) ** 2
+        return (base * sample_weights).mean()
+
+
 class Stage2SequenceModels:
     """
     Optional PyTorch sequence-model scaffold for Stage 2.
@@ -76,6 +88,12 @@ class Stage2SequenceModels:
         import numpy as np
         return np.stack(step_arrays, axis=1)
 
+    def _sample_weights(self, df):
+        spread = pd.to_numeric(df.get("spread", 0.0), errors="coerce").fillna(0.0)
+        vol = pd.to_numeric(df.get("volatility_score", df.get("btc_realized_vol_15m", 0.0)), errors="coerce").fillna(0.0)
+        weights = 1.0 + spread.abs() + vol.abs()
+        return weights.astype(float).values
+
     def train(self, epochs=5, batch_size=64, learning_rate=1e-3):
         if torch is None:
             raise ImportError("PyTorch is required for Stage2SequenceModels. Install torch to use this sequence-model path.")
@@ -96,15 +114,17 @@ class Stage2SequenceModels:
         if X is None:
             return pd.DataFrame()
 
+        sample_weights = self._sample_weights(df)
         split_idx = int(len(df) * 0.8)
         X_train, X_test = X[:split_idx], X[split_idx:]
+        w_train = sample_weights[:split_idx]
         results = {}
 
         if "tp_before_sl_60m" in df.columns:
             y = df["tp_before_sl_60m"].fillna(0).astype(int).values
             y_train, y_test = y[:split_idx], y[split_idx:]
             clf = SequenceGRU(input_size=X.shape[2], output_size=1, task="classification")
-            self._fit_model(clf, X_train, y_train, epochs, batch_size, learning_rate, task="classification")
+            self._fit_model(clf, X_train, y_train, w_train, epochs, batch_size, learning_rate, task="classification")
             torch.save(clf.state_dict(), self.classifier_file)
             results["sequence_classifier_trained"] = True
 
@@ -112,23 +132,24 @@ class Stage2SequenceModels:
             y = df["forward_return_15m"].fillna(0.0).astype(float).values
             y_train, y_test = y[:split_idx], y[split_idx:]
             reg = SequenceGRU(input_size=X.shape[2], output_size=1, task="regression")
-            self._fit_model(reg, X_train, y_train, epochs, batch_size, learning_rate, task="regression")
+            self._fit_model(reg, X_train, y_train, w_train, epochs, batch_size, learning_rate, task="regression")
             torch.save(reg.state_dict(), self.regressor_file)
             results["sequence_regressor_trained"] = True
 
         return pd.DataFrame([results]) if results else pd.DataFrame()
 
-    def _fit_model(self, model, X, y, epochs, batch_size, learning_rate, task="classification"):
+    def _fit_model(self, model, X, y, sample_weights, epochs, batch_size, learning_rate, task="classification"):
         X_tensor = torch.tensor(X, dtype=torch.float32)
         y_tensor = torch.tensor(y, dtype=torch.float32).view(-1, 1)
-        loader = DataLoader(TensorDataset(X_tensor, y_tensor), batch_size=batch_size, shuffle=False)
+        w_tensor = torch.tensor(sample_weights, dtype=torch.float32).view(-1, 1)
+        loader = DataLoader(TensorDataset(X_tensor, y_tensor, w_tensor), batch_size=batch_size, shuffle=False)
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-        criterion = nn.BCEWithLogitsLoss() if task == "classification" else nn.MSELoss()
+        criterion = WeightedBCELoss() if task == "classification" else WeightedMSELoss()
         model.train()
         for _ in range(epochs):
-            for xb, yb in loader:
+            for xb, yb, wb in loader:
                 optimizer.zero_grad()
                 pred = model(xb)
-                loss = criterion(pred, yb)
+                loss = criterion(pred, yb, wb)
                 loss.backward()
                 optimizer.step()
