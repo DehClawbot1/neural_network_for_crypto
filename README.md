@@ -201,8 +201,15 @@ Recent UI improvements include:
 ## 1) Install
 
 ```bash
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
+
+Current requirements include the newer modeling stack used by the refactor, including packages such as:
+- `scikit-learn`
+- `joblib`
+- `lightgbm`
+- `catboost`
 
 ## 2) Create / validate local env
 
@@ -240,6 +247,7 @@ If the repo already exists locally:
 
 ```powershell
 git pull origin main
+python -m pip install -r requirements.txt
 python run_bot.py
 ```
 
@@ -277,6 +285,26 @@ This repo is improving fast, but it is still a **research system under active re
 
 The newer supervised / event-driven path is the direction of travel.
 The older dummy RL path still exists in parts of the codebase, but it should no longer be treated as the core intelligence for the real goal.
+
+## Troubleshooting
+
+### `ModuleNotFoundError` when starting
+
+Usually this means dependencies were not refreshed after a newer modeling/UI pass.
+
+Run:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Then retry:
+
+```powershell
+python run_bot.py
+```
+
+If the error mentions a specific package like `joblib`, `lightgbm`, or `catboost`, reinstalling from `requirements.txt` should fix it.
 
 ## Next intended direction
 
