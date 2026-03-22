@@ -1486,8 +1486,11 @@ def main():
             render_alerts(alerts_df)
 
     with tab5:
-        render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df, backtest_wallet_df, model_registry_df)
-        render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
+        sub_model, sub_quality = st.tabs(["Model Performance", "Data Quality & Pipeline Readiness"])
+        with sub_model:
+            render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df, backtest_wallet_df, model_registry_df)
+        with sub_quality:
+            render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
 
 
 if __name__ == "__main__":
