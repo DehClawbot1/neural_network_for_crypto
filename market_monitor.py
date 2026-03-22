@@ -46,6 +46,18 @@ def fetch_btc_markets(limit=1000, closed=False):
             clob_token_ids = market.get("clobTokenIds") or []
             yes_token_id = clob_token_ids[0] if len(clob_token_ids) > 0 else None
             no_token_id = clob_token_ids[1] if len(clob_token_ids) > 1 else None
+            best_bid = market.get("bestBid") or market.get("best_bid") or market.get("bid")
+            best_ask = market.get("bestAsk") or market.get("best_ask") or market.get("ask")
+            midpoint = None
+            spread = None
+            if best_bid is not None and best_ask is not None:
+                try:
+                    midpoint = (float(best_bid) + float(best_ask)) / 2.0
+                    spread = abs(float(best_ask) - float(best_bid))
+                except Exception:
+                    midpoint = None
+                    spread = None
+
             btc_markets.append(
                 {
                     "timestamp": datetime.utcnow().isoformat(),
@@ -57,6 +69,12 @@ def fetch_btc_markets(limit=1000, closed=False):
                     "liquidity": market.get("liquidity", 0),
                     "volume": market.get("volume", 0),
                     "last_trade_price": market.get("lastTradePrice", 0),
+                    "best_bid": best_bid,
+                    "best_ask": best_ask,
+                    "midpoint": midpoint,
+                    "spread": spread,
+                    "bid_size": market.get("bidSize") or market.get("bid_size"),
+                    "ask_size": market.get("askSize") or market.get("ask_size"),
                     "end_date": market.get("endDate"),
                     "slug": market.get("slug"),
                     "clob_token_ids": clob_token_ids,
