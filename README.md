@@ -1,82 +1,80 @@
 # Neural Network for Crypto
 
-Public-data Polymarket research system for **BTC-related markets**, **smart-wallet tracking**, **paper-trading simulation**, **historical model training**, and an isolated **`live-test`** branch for future authenticated execution experiments.
+Public-data Polymarket research and paper-trading system focused on **BTC-related markets**, **smart-wallet tracking**, **historical modeling**, **paper execution**, and an isolated **`live-test`** branch for experimental authenticated execution and live-learning scaffolding.
 
-## What this repo is
+---
+
+## What this repo is for
 
 This project is for:
 - public Polymarket market discovery
 - public wallet / leaderboard analysis
-- token-level historical dataset building
-- supervised and replay-based research
-- paper-trading simulation
-- monitoring / dashboarding
+- historical feature + label generation
+- supervised / temporal / hybrid modeling
+- replay-based and paper-trading evaluation
+- monitoring, incident tracking, and operational dashboards
 
-On the paper / research line, this repo is for:
-- connecting your live Polymarket account on `main`
-- storing or requiring real trading credentials for paper mode
-- placing real-money orders from the paper path
+This project is **not** for on `main`:
+- live real-money execution
+- storing or requiring Polymarket credentials for paper mode
+- authenticated account activity in the default paper path
+
+---
 
 ## Branch policy
 
 ### `main`
-Intended to stay:
+Must stay:
 - **public-data only**
 - **paper-trading only**
 - **research / backtesting only**
 
-You do **not** need a Polymarket API key for the default paper setup.
+No Polymarket API key is needed for the default paper path.
 
 ### `live-test`
-Experimental branch for isolated authenticated execution scaffolding and operational hardening.
+Experimental branch for:
+- authenticated execution scaffolding
+- order lifecycle handling
+- readiness / risk gating
+- reconciliation / DB logging
+- live env + live-learning scaffolds
+- stronger monitoring / ops tooling
 
-Recent `live-test` work includes:
-- `execution_client.py`
-- `order_manager.py`
-- `reconciliation_service.py`
-- `live_risk_manager.py`
-- `db.py`
-- `incident_manager.py`
-- backend alert normalization
-- system health snapshots
-- service heartbeat tracking
-- incident lifecycle logging
-- stronger monitoring dashboard sections
+---
 
 ## External data sources
 
-The research / paper path uses public endpoints only:
-- **Gamma API** for market discovery
-- **Data API** for leaderboard + public wallet trades
-- **CLOB read endpoints** for price history and pricing research
-- optional public **CLOB WebSocket** for live market updates
+Public / research side uses:
+- **Gamma API** — market discovery
+- **Data API** — leaderboard + public wallet trades
+- **CLOB REST** — price / history research
+- **CLOB WebSocket** — live quote monitoring
 
-## High-level architecture
+---
 
-### Runtime entrypoints
-- `run_bot.py` — default launcher
-- `run_paper.py` — explicit paper entrypoint
-- `run_live_test.py` — explicit live-test entrypoint
-- `web_api.py` — local API for dashboard / inspection
-- `dashboard.py` — Streamlit monitoring UI
+## Core architecture
 
-### Core runtime flow
+### Entrypoints
+- `run_bot.py` — main launcher
+- `run_paper.py` — explicit paper launcher
+- `run_live_test.py` — explicit live-test launcher
+- `run_everything.py` — unified multiprocessing launcher for execution + nearline learning on `live-test`
+- `dashboard.py` — Streamlit UI
+- `web_api.py` — local API / docs
+
+### High-level runtime flow
 1. fetch BTC-related markets
 2. scrape public wallet activity
-3. build features from only past-known information
-4. run supervised / hybrid inference
-5. rank paper opportunities
+3. build past-only features
+4. run supervised / temporal / hybrid scoring
+5. rank opportunities
 6. simulate paper positions and exits
-7. write logs, health files, alerts, and monitoring outputs
-8. optionally retrain when enough real paper outcomes exist
+7. write logs / health / alerts / incidents / dashboard outputs
+8. optionally retrain from outcomes
 
-## Important design rules
+---
 
-### Paper path
-- public-data only
-- paper-trading only
-- no live auth required
-- no real execution on `main`
+## Key design rules
 
 ### Trade semantics
 Use explicit Polymarket semantics:
@@ -89,50 +87,56 @@ Use explicit Polymarket semantics:
 Do **not** infer YES/NO from BUY/SELL.
 
 ### PnL accounting
-Polymarket-style share accounting is the rule:
+Use share-based Polymarket-style accounting:
 
 ```text
 shares = capital_usdc / entry_price
 pnl = shares * (exit_price - entry_price) - fees
 ```
 
-### Validation philosophy
-- time split / walk-forward validation
-- no random leakage-heavy split
-- token-level CLOB history is the source of truth for labels / replay
-- features must be strictly past-only at signal time
+### Validation
+- no random-split leakage for time-series work
+- time split / walk-forward validation is preferred
+- token-level CLOB history is the label source of truth
+- missing RL weights must not abort startup
+
+---
 
 ## Main modules
 
-### Market / wallet collection
-- `market_monitor.py` — Gamma market discovery / monitoring
-- `leaderboard_scraper.py` — public wallet and public trade discovery
-- `clob_history.py` — token-level CLOB price history collection
-- `market_price_service.py` — live-ish pricing and quote helpers
+### Market / wallet data
+- `market_monitor.py` — Gamma pagination + BTC market filtering
+- `leaderboard_scraper.py` — public leaderboard / wallet-trade scraping
+- `clob_history.py` — token-level historical prices
+- `market_price_service.py` — quote / midpoint / spread / websocket monitoring
 
-### Dataset / labeling / features
+### Feature / label pipeline
 - `historical_dataset_builder.py`
 - `feature_builder.py`
 - `target_builder.py`
 - `contract_target_builder.py`
 - `wallet_alpha_builder.py`
 - `sequence_feature_builder.py`
-- `schema.py` — shared schema contract rollout
+- `schema.py`
+- `autoencoder_features.py` — latent feature compression scaffold
 
-### Models / inference / evaluation
+### Models / evaluation
 - `supervised_models.py`
 - `model_inference.py`
 - `stage1_models.py`
 - `stage1_inference.py`
-- `stage2_temporal_models.py`
+- `stage2_temporal_models.py` — temporal sklearn baseline with scaling, class balancing, walk-forward validation, regularization
+- `stage2_sequence_models.py` — GRU-based PyTorch sequence scaffold
+- `stage2_transformer_models.py` — transformer / attention scaffold
 - `stage2_temporal_inference.py`
-- `stage3_hybrid.py`
+- `stage3_hybrid.py` — hybrid scorer + ensemble agreement gating
 - `evaluator.py`
 - `time_split_trainer.py`
-- `backtester.py`
+- `model_tuning.py` — Optuna-based tuning scaffold
 - `retrainer.py`
+- `backtester.py`
 
-### Paper trading / lifecycle
+### Paper trading / replay
 - `signal_engine.py`
 - `strategy_layers.py`
 - `position_manager.py`
@@ -140,106 +144,143 @@ pnl = shares * (exit_price - entry_price) - fees
 - `trade_lifecycle.py`
 - `polytrade_env.py`
 - `path_replay_simulator.py`
-- `execution_client.py` (paper abstraction on the paper path)
 
-### Live-test-only / operational pieces
+### Live-test execution / ops
+- `execution_client.py`
 - `order_manager.py`
 - `reconciliation_service.py`
 - `live_risk_manager.py`
 - `db.py`
 - `api_setup.py`
-
-### Monitoring / ops
-- `alerts_engine.py`
-- `autonomous_monitor.py`
 - `incident_manager.py`
-- `dashboard.py`
-- `web_api.py`
+- `live_replay_buffer.py`
 
-## Monitoring and operational outputs
+---
 
-Generated in `logs/`:
-- `signals.csv`
-- `execution_log.csv`
-- `daily_summary.txt`
-- `markets.csv`
-- `whales.csv`
-- `market_distribution.csv`
-- `alerts.csv`
-- `positions.csv`
-- `closed_positions.csv`
-- `historical_dataset.csv`
-- `contract_targets.csv`
-- `supervised_eval.csv`
-- `time_split_eval.csv`
-- `path_replay_backtest.csv`
-- `model_status.csv`
+## Live-test additions
+
+The `live-test` branch now includes:
+- stored Polymarket L2 API credential support in `execution_client.py`
+- fallback credential derivation only when stored L2 creds are missing
+- `LivePolyTradeEnv` scaffold using live quote / balance / position state
+- live order-manager wiring from env actions
+- live experience logging to `logs/live_experience.csv`
+- nearline fine-tuning scaffold from live replay buffer
+- unified execution + training launcher via multiprocessing
+
+### Live learning scaffolds
+- `LivePolyTradeEnv` in `polytrade_env.py`
+- `live_replay_buffer.py`
+- `rl_trainer.py::fine_tune_from_live_buffer(...)`
+- live reward path scaffold based on balance deltas / fill polling
+- expanded live observation space including:
+  - bid / ask / midpoint / spread
+  - live balance
+  - unrealized PnL
+  - order-book imbalance
+  - time decay to resolution
+  - correlated BTC feed
+
+---
+
+## Monitoring / ops
+
+### Monitoring files in `logs/`
 - `system_health.csv`
 - `service_heartbeats.csv`
 - `incidents.csv`
+- `alerts.csv`
+- `signals.csv`
+- `execution_log.csv`
+- `positions.csv`
+- `closed_positions.csv`
+- `path_replay_backtest.csv`
+- `model_status.csv`
+- `live_experience.csv`
 
-Other important outputs:
-- `weights/model_registry.csv`
-- `weights/ppo_polytrader.zip` (optional / non-required on startup)
-- `logs/trading.db` on `live-test`
+### Monitoring improvements on `live-test`
+- normalized alert fields:
+  - `alert_id`
+  - `severity`
+  - `status`
+  - `source_module`
+  - `message`
+- service heartbeat tracking
+- incident lifecycle logging
+- cross-source reconciliation checks
+- anomaly detection
+- prediction-health / drift monitoring
+- data-quality / schema-health views
+
+---
 
 ## Dashboard layout (`live-test`)
 
-The Streamlit dashboard now follows a monitoring-oriented layout:
+The dashboard is now organized into:
 - **System Status**
 - **Signals & Opportunities**
 - **Positions & PnL**
 - **Markets, Whales & Alerts**
 - **Models & Data Quality**
 
-Key UI additions on `live-test`:
+### Important dashboard capabilities
 - real data freshness panel
 - pipeline health strip
-- centralized “Attention Needed” warnings
-- global sidebar controls and filters
-- richer opportunity cards
-- ranked opportunity table with CSV export
+- centralized **Attention Needed** section
+- richer sidebar controls and global filters
+- opportunity cards + ranking table + CSV export
 - grouped recommended paper actions
-- paper equity / drawdown charts
+- PnL / equity / drawdown charts
 - richer open / closed position ledgers
-- market / whale / alert monitoring subtabs
-- model performance and data-quality readiness subtabs
-- schema health and anomaly detection panels
-- raw logs moved into collapsible debug sections
+- market / whale / alert subtabs
+- model-performance and data-quality readiness subtabs
+- debug raw logs in collapsible sections
 
-## Monitoring improvements on `live-test`
+---
 
-Recent operational improvements include:
-- normalized alert fields: `alert_id`, `severity`, `status`, `source_module`, `message`
-- service heartbeat tracking for core runtime modules
-- system health snapshots
-- incident lifecycle logging with dedupe keys
-- cross-source reconciliation checks
-- monitoring-grade anomaly detection
-- prediction-health / confidence-drift monitoring
+## Modeling upgrades recently added
+
+### Temporal sklearn improvements
+- feature scaling for MLPs
+- class balancing before classifier fit
+- walk-forward `TimeSeriesSplit`
+- regularization / early stopping / learning-rate tuning hooks
+
+### Deep-learning scaffolds
+- GRU sequence model scaffold
+- transformer / attention scaffold
+- profit-weighted loss scaffold
+- autoencoder latent-feature builder
+
+### Hybrid / ensemble logic
+- random-forest + neural agreement columns
+- ensemble probability / agreement gating
+- live-candidate gating when both sides agree above threshold
+
+---
 
 ## Quick start
 
-## 1) Install
+### Install
 
 ```bash
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Optional test dependencies:
+Optional dev / test packages:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 ```
 
-## 2) Local setup
+### Environment setup
 
 ```bash
 python api_setup.py
 ```
 
-## 3) Run paper mode
+### Run paper mode
 
 ```bash
 python run_bot.py
@@ -251,23 +292,25 @@ Or explicitly:
 python run_paper.py
 ```
 
-In another terminal:
+### Run dashboard
 
 ```bash
 python -m streamlit run dashboard.py
 ```
 
-Optional local API:
+### Run local API
 
 ```bash
 python -m uvicorn web_api:app --reload
 ```
 
-API docs:
+Docs:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
+
+---
 
 ## Windows usage
 
@@ -291,78 +334,129 @@ python run_bot.py
 python -m streamlit run dashboard.py
 ```
 
-If the browser looks stale after updates, do a hard refresh:
+### Unified live-test execution + learning
+
+```powershell
+python run_everything.py
+```
+
+Hard refresh browser if UI seems stale:
 
 ```text
 Ctrl + F5
 ```
 
+---
+
+## Main outputs
+
+Generated in `logs/`:
+- `signals.csv`
+- `execution_log.csv`
+- `daily_summary.txt`
+- `markets.csv`
+- `whales.csv`
+- `market_distribution.csv`
+- `alerts.csv`
+- `positions.csv`
+- `closed_positions.csv`
+- `historical_dataset.csv`
+- `contract_targets.csv`
+- `supervised_eval.csv`
+- `time_split_eval.csv`
+- `stage2_temporal_eval.csv`
+- `path_replay_backtest.csv`
+- `model_status.csv`
+- `system_health.csv`
+- `service_heartbeats.csv`
+- `incidents.csv`
+- `live_experience.csv`
+- `autoencoder_latent_features.csv`
+
+Generated in `weights/`:
+- `tp_classifier.joblib`
+- `return_regressor.joblib`
+- `stage2_temporal_classifier.joblib`
+- `stage2_temporal_regressor.joblib`
+- `stage2_sequence_classifier.pt`
+- `stage2_sequence_regressor.pt`
+- `stage2_transformer.pt`
+- `feature_autoencoder.pt`
+- `ppo_polytrader.zip`
+
+---
+
 ## Testing
 
-Run the test suite with:
+Run tests with:
 
 ```bash
 pytest -q
 ```
 
-The repo now includes basic CI and smoke coverage for more than only low-level math.
+Basic CI and smoke checks are already in the repo.
+
+---
 
 ## Troubleshooting
 
-### Missing dependency errors
+### Missing dependencies
 
-If startup fails with something like `ModuleNotFoundError`, refresh dependencies:
+If you hit `ModuleNotFoundError`:
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-If needed:
+Optional extras if using advanced model scaffolds:
+- `torch`
+- `optuna`
 
-```powershell
-python -m pip install -r requirements-dev.txt
-```
+### Dashboard looks stale or blank
 
-### Dashboard looks blank or stale
-
-Common causes:
-- old Streamlit process still running
+Typical causes:
+- old Streamlit process
 - stale browser cache
-- missing research artifacts
+- missing artifact files
 - schema mismatch in logs
-- empty / missing monitoring files
+- monitoring files empty / stale
 
-Recommended fix path:
+Recommended recovery:
 
 ```powershell
 python run_bot.py
 python -m streamlit run dashboard.py
 ```
 
-Then hard refresh the browser with `Ctrl + F5`.
+Then hard refresh with `Ctrl + F5`.
+
+---
 
 ## Current reality
 
 This repo is still a **research system under active refactor**.
 
 Current direction:
-- supervised / event-driven ranking is primary
-- replay-based evaluation is increasingly central
-- paper monitoring is becoming much stronger
-- live execution work remains isolated to `live-test`
+- supervised / temporal / hybrid ranking is primary
+- replay-based evaluation is core
+- paper monitoring is much stronger than before
+- `live-test` is where execution and live-learning experiments belong
+- RL is optional / experimental, not the paper-path foundation
 
-RL is optional fallback only and should not be treated as the main intelligence path.
+---
 
-## Near-term direction
+## Next direction
 
-Main ongoing directions include:
-- opportunity-scoring refactor
+Near-term ongoing work includes:
+- deeper opportunity-scoring refactor
 - stronger candidate generation vs ranking separation
-- deeper wallet behavior modeling
-- more robust microstructure support
-- fuller live readiness and reconciliation on `live-test`
+- richer wallet behavior modeling
+- better microstructure support
+- stronger live readiness and reconciliation
 - broader schema rollout across the repo
-- more operational monitoring and drift checks
+- further drift / incident / ops hardening
+
+---
 
 ## Safety reminder
 
@@ -371,4 +465,4 @@ On `main`, keep this repo:
 - paper-trading only
 - research / backtesting only
 
-Live execution experiments belong on `live-test`, not on `main`.
+Live execution experiments belong on **`live-test`**, not on `main`.
