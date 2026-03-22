@@ -34,8 +34,10 @@ class Stage1Inference:
                 preds = reg_saved["model"].predict(out[feat_cols])
                 out["expected_return"] = preds
 
-        out["p_tp_before_sl"] = out.get("p_tp_before_sl", 0.0)
-        out["expected_return"] = out.get("expected_return", 0.0)
+        if "p_tp_before_sl" not in out.columns:
+            out["p_tp_before_sl"] = 0.0
+        if "expected_return" not in out.columns:
+            out["expected_return"] = 0.0
         out["return_std"] = abs(out["expected_return"].astype(float)) * 0.35
         out["lower_confidence_bound"] = out["expected_return"].astype(float) - out["return_std"].astype(float)
         out["edge_score"] = out["p_tp_before_sl"].astype(float) * out["lower_confidence_bound"].astype(float)

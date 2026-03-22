@@ -15,11 +15,20 @@ class Stage3HybridScorer:
             return pd.DataFrame()
 
         out = df.copy()
-        out["p_win"] = out.get("p_tp_before_sl", 0.0).astype(float)
+        if "p_tp_before_sl" not in out.columns:
+            out["p_tp_before_sl"] = 0.0
+        if "expected_return" not in out.columns:
+            out["expected_return"] = 0.0
+        if "lower_confidence_bound" not in out.columns:
+            out["lower_confidence_bound"] = 0.0
+        if "temporal_expected_return" not in out.columns:
+            out["temporal_expected_return"] = 0.0
+
+        out["p_win"] = out["p_tp_before_sl"].astype(float)
         out["p_loss"] = 1.0 - out["p_win"]
-        out["expected_payoff"] = out.get("expected_return", 0.0).astype(float).clip(lower=0.0)
-        out["expected_loss"] = out.get("lower_confidence_bound", 0.0).astype(float).abs()
-        out["temporal_boost"] = out.get("temporal_expected_return", 0.0).astype(float)
+        out["expected_payoff"] = out["expected_return"].astype(float).clip(lower=0.0)
+        out["expected_loss"] = out["lower_confidence_bound"].astype(float).abs()
+        out["temporal_boost"] = out["temporal_expected_return"].astype(float)
         out["hybrid_edge"] = (
             out["p_win"] * (out["expected_payoff"] + out["temporal_boost"].clip(lower=0.0) * 0.35)
             - out["p_loss"] * out["expected_loss"] * self.risk_penalty
