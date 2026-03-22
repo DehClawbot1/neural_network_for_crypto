@@ -67,7 +67,12 @@ def get_recent_btc_trades(wallet_address, limit=15):
         for trade in trades:
             title = trade.get("title", "").lower()
 
-            if "bitcoin" in title or "btc" in title:
+            if (
+                "bitcoin" in title
+                or "btc" in title
+                or "bitcoin para cima ou para baixo" in title
+                or "para cima ou para baixo" in title
+            ):
                 signals.append(
                     {
                         "trader_wallet": wallet_address,

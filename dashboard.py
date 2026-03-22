@@ -96,6 +96,40 @@ def inject_styles():
                 margin-bottom: 0.9rem;
                 color: #f8fafc;
             }
+            .overview-card {
+                background: linear-gradient(180deg, #121826 0%, #111827 100%);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 18px;
+                padding: 0.9rem 1rem;
+                margin-bottom: 1rem;
+            }
+            .live-dot {
+                display:inline-block;
+                width:10px;
+                height:10px;
+                background:#22c55e;
+                border-radius:50%;
+                margin-right:8px;
+                box-shadow:0 0 10px rgba(34,197,94,0.8);
+            }
+            .confidence-bar-wrap {
+                width:100%;
+                height:10px;
+                background:rgba(255,255,255,0.08);
+                border-radius:999px;
+                overflow:hidden;
+                margin-top:0.45rem;
+                margin-bottom:0.2rem;
+            }
+            .confidence-bar-fill {
+                height:100%;
+                border-radius:999px;
+                background:linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+            }
+            .small-muted {
+                color:#94a3b8;
+                font-size:0.85rem;
+            }
         </style>
         """,
         unsafe_allow_html=True,
@@ -104,11 +138,19 @@ def inject_styles():
 
 def render_header():
     st.markdown(
-        """
+        f"""
         <div class="hero-box">
-            <h1 style="margin-bottom:0.35rem;">📈 Neural Network for Crypto</h1>
-            <div style="color:#94a3b8; font-size:1rem;">
-                Real-time public-data market tracker + whale tracker + paper-trading dashboard
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div>
+                    <h1 style="margin-bottom:0.35rem;">📈 Neural Network for Crypto</h1>
+                    <div style="color:#94a3b8; font-size:1rem;">
+                        Real-time public-data market tracker + whale tracker + paper-trading dashboard
+                    </div>
+                </div>
+                <div class="overview-card" style="min-width:240px; margin-bottom:0;">
+                    <div><span class="live-dot"></span><strong>Live</strong></div>
+                    <div class="small-muted">Last refresh: {datetime.now().strftime('%H:%M:%S')}</div>
+                </div>
             </div>
         </div>
         """,
@@ -131,14 +173,26 @@ def render_overview(signals_df, trades_df, markets_df, alerts_df):
         except Exception:
             top_conf = "-"
 
+    tracked_market_count = len(markets_df)
+    if not markets_df.empty and "market_id" in markets_df.columns:
+        tracked_market_count = markets_df["market_id"].nunique()
+
     with c1:
+        st.markdown('<div class="overview-card">', unsafe_allow_html=True)
         st.metric("Ranked Signals", len(signals_df))
+        st.markdown('</div>', unsafe_allow_html=True)
     with c2:
+        st.markdown('<div class="overview-card">', unsafe_allow_html=True)
         st.metric("Paper Trades", len(trades_df))
+        st.markdown('</div>', unsafe_allow_html=True)
     with c3:
-        st.metric("Tracked BTC Markets", len(markets_df))
+        st.markdown('<div class="overview-card">', unsafe_allow_html=True)
+        st.metric("Tracked BTC Markets", tracked_market_count)
+        st.markdown('</div>', unsafe_allow_html=True)
     with c4:
+        st.markdown('<div class="overview-card">', unsafe_allow_html=True)
         st.metric("Recent Alerts", len(alerts_df))
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.caption(f"Highest confidence: {top_conf} | Last refresh: {datetime.now().strftime('%H:%M:%S')}")
 
@@ -200,6 +254,12 @@ def render_top_opportunities(signals_df):
             reason = row.get("reason", "No reason available")
             market_url = row.get("market_url")
 
+            conf_pct = 0
+            try:
+                conf_pct = max(0, min(100, int(float(confidence) * 100)))
+            except Exception:
+                conf_pct = 0
+
             st.markdown(
                 f"""
                 <div class="market-card">
@@ -207,7 +267,10 @@ def render_top_opportunities(signals_df):
                     <div>
                         <span class="signal-badge {badge_class(label)}">{label}</span>
                         <span class="signal-badge badge-ignore">Observed side: {side}</span>
-                        <span class="signal-badge badge-ignore">Confidence: {confidence}</span>
+                    </div>
+                    <div class="small-muted">Confidence score: {conf_pct}%</div>
+                    <div class="confidence-bar-wrap">
+                        <div class="confidence-bar-fill" style="width:{conf_pct}%;"></div>
                     </div>
                     <div class="meta-line"><b>Source wallet:</b> {wallet}</div>
                     <div class="reason-box">{reason}</div>

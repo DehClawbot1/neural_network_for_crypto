@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 GAMMA_MARKETS_URL = "https://gamma-api.polymarket.com/markets"
 
 
-def fetch_btc_markets(limit=500, closed=False):
+def fetch_btc_markets(limit=1000, closed=False):
     """
     Fetch public Polymarket markets and filter for Bitcoin/BTC-related ones.
     This is for research/monitoring only.
@@ -30,7 +30,19 @@ def fetch_btc_markets(limit=500, closed=False):
         title = str(market.get("title", ""))
         text_blob = f"{question} {title}".lower()
 
-        if "bitcoin" in text_blob or "btc" in text_blob:
+        btc_keywords = [
+            "bitcoin",
+            "btc",
+            "bitcoin above",
+            "bitcoin below",
+            "bitcoin price",
+            "bitcoin up or down",
+            "bitcoin para cima ou para baixo",
+            "para cima ou para baixo",
+            "$btc",
+        ]
+
+        if any(keyword in text_blob for keyword in btc_keywords):
             btc_markets.append(
                 {
                     "timestamp": datetime.utcnow().isoformat(),
