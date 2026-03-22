@@ -11,3 +11,4 @@ streamlit
 plotly
 fastapi
 uvicorn
+scikit-learn
