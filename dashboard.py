@@ -269,6 +269,38 @@ def render_pipeline_health_strip(signals_df, markets_df, positions_df, model_sta
             st.markdown('</div>', unsafe_allow_html=True)
 
 
+def render_attention_needed(signals_df, trades_df, alerts_df, positions_df, model_status_df, path_replay_df):
+    st.markdown('<div class="section-title">Attention Needed</div>', unsafe_allow_html=True)
+    warnings = []
+    now = pd.Timestamp.utcnow()
+
+    signal_ts = _latest_timestamp_from_df(signals_df)
+    if signal_ts is None or (now - signal_ts).total_seconds() > 1800:
+        warnings.append("No signals in last 30 min")
+    positions_ts = _latest_timestamp_from_df(positions_df)
+    if positions_ts is None or (now - positions_ts).total_seconds() > 600:
+        warnings.append("Positions file stale")
+    if not ALERTS_FILE.exists() or alerts_df is None or alerts_df.empty:
+        warnings.append("Alerts file missing")
+    if signals_df is None or signals_df.empty or "confidence" not in signals_df.columns:
+        warnings.append("Confidence column missing")
+    if EXECUTION_FILE.exists() and LEGACY_EXECUTION_FILE.exists():
+        exec_rows = len(load_csv(EXECUTION_FILE))
+        legacy_rows = len(load_csv(LEGACY_EXECUTION_FILE))
+        if abs(exec_rows - legacy_rows) > 0:
+            warnings.append("Trade source mismatch")
+    if model_status_df is None or model_status_df.empty:
+        warnings.append("Model outputs missing")
+    if path_replay_df is None or path_replay_df.empty:
+        warnings.append("No replay outputs available")
+
+    if warnings:
+        for item in warnings:
+            st.warning(item)
+    else:
+        st.success("No immediate incidents detected.")
+
+
 def render_header():
     freshness = get_data_freshness(SIGNALS_FILE, MARKETS_FILE, ALERTS_FILE)
     st.markdown(
@@ -980,6 +1012,7 @@ def main():
             ("model_status.csv", MODEL_STATUS_FILE, model_status_df),
         ])
         render_pipeline_health_strip(signals_df, markets_df, positions_df, model_status_df, path_replay_df)
+        render_attention_needed(signals_df, trades_df, alerts_df, positions_df, model_status_df, path_replay_df)
         render_performance_charts(trades_df, closed_positions_df, alerts_df, backtest_wallet_df, model_registry_df, positions_df=positions_df)
 
     with tab2:
