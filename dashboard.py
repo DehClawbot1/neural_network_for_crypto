@@ -984,20 +984,27 @@ def render_performance_charts(trades_df, closed_positions_df, alerts_df, backtes
 
 
 def render_best_trades(closed_positions_df, path_replay_df):
-    st.markdown('<div class="section-title">Most Successful Trades</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Best / Worst Trades</div>', unsafe_allow_html=True)
     source_df = closed_positions_df if not closed_positions_df.empty else path_replay_df
     if source_df.empty:
-        st.info("No successful trade history yet.")
+        st.info("No closed trade history yet.")
         return
 
-    pnl_col = "unrealized_pnl" if "unrealized_pnl" in source_df.columns else "net_pnl" if "net_pnl" in source_df.columns else None
+    pnl_col = "net_realized_pnl" if "net_realized_pnl" in source_df.columns else "realized_pnl" if "realized_pnl" in source_df.columns else "net_pnl" if "net_pnl" in source_df.columns else "unrealized_pnl" if "unrealized_pnl" in source_df.columns else None
     if pnl_col is None:
         st.dataframe(source_df.head(10), width="stretch")
         return
 
-    best_df = source_df.sort_values(by=pnl_col, ascending=False).head(10)
-    cols = [c for c in ["market", "entry_price", "current_price", "exit_price", pnl_col, "close_reason", "exit_reason", "wallet_copied"] if c in best_df.columns]
-    st.dataframe(best_df[cols], width="stretch")
+    cols = [c for c in ["market", "entry_price", "exit_price", pnl_col, "wallet_copied", "close_reason", "exit_reason"] if c in source_df.columns]
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Top Winners**")
+        winners = source_df.sort_values(by=pnl_col, ascending=False).head(10)
+        st.dataframe(winners[cols], width="stretch", hide_index=True)
+    with right:
+        st.markdown("**Top Losers**")
+        losers = source_df.sort_values(by=pnl_col, ascending=True).head(10)
+        st.dataframe(losers[cols], width="stretch", hide_index=True)
 
 
 def render_action_board(signals_df, positions_df):
