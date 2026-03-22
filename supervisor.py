@@ -121,7 +121,16 @@ def log_ranked_signal(signal_row):
     append_csv_record(SIGNALS_FILE, record)
 
 
-def choose_action(signal_row, entry_rule: EntryRuleLayer):
+def choose_action(signal_row, entry_rule: EntryRuleLayer, brain=None):
+    if brain is not None:
+        try:
+            obs = prepare_observation(signal_row)
+            action, _ = brain.predict(obs, deterministic=True)
+            action_val = int(action.item() if hasattr(action, "item") else action[0])
+            return action_val
+        except Exception:
+            pass
+
     if not entry_rule.should_enter(signal_row):
         return 0
     edge_score = float(signal_row.get("edge_score", 0.0) or 0.0)
@@ -258,10 +267,12 @@ def main_loop():
                 log_ranked_signal(ranked_row.to_dict())
             print("======================================\n")
 
-            # 4. Use supervised-first ranking + entry rules for paper execution
+            # 4. Use RL policy for execution when available; fall back to rules otherwise
             for _, row in scored_df.iterrows():
                 signal_row = row.to_dict()
-                action_val = choose_action(signal_row, entry_rule)
+                action_val = choose_action(signal_row, entry_rule, brain=brain)
+                if action_val not in [0, 1, 2]:
+                    action_val = 0
 
                 execute_paper_trade(action_val, signal_row)
 
