@@ -782,7 +782,21 @@ def render_whale_tracker(whales_df):
         st.info("No whale summary yet.")
         return
 
-    st.dataframe(whales_df.head(15), width="stretch")
+    wallet_col = "wallet" if "wallet" in whales_df.columns else "trader_wallet" if "trader_wallet" in whales_df.columns else None
+    market_col = "market" if "market" in whales_df.columns else "market_title" if "market_title" in whales_df.columns else None
+    watched_wallets_count = int(whales_df[wallet_col].nunique()) if wallet_col else len(whales_df)
+    most_active_wallet = str(whales_df[wallet_col].astype(str).value_counts().idxmax()) if wallet_col else "-"
+    highest_concentration_market = str(whales_df[market_col].astype(str).value_counts().idxmax()) if market_col else "-"
+    total_unique_markets = int(whales_df[market_col].nunique()) if market_col else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Watched Wallets", watched_wallets_count)
+    c2.metric("Most Active Wallet", most_active_wallet)
+    c3.metric("Highest Concentration Market", highest_concentration_market)
+    c4.metric("Unique Markets Touched", total_unique_markets)
+
+    cols = [c for c in [wallet_col, "username", "profit", "volume", "positionValue", market_col] if c and c in whales_df.columns]
+    st.dataframe(whales_df[cols].head(20) if cols else whales_df.head(20), width="stretch", hide_index=True)
 
 
 def render_market_distribution(distribution_df):
