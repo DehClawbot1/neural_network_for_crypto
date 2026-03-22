@@ -59,6 +59,27 @@ def load_execution_history():
     return combined
 
 
+def apply_dashboard_filters(df, market_search="", wallet_search="", min_confidence=0.0, signal_label="All", position_status="All"):
+    if df is None or df.empty:
+        return df
+    out = df.copy()
+    if market_search:
+        market_col = "market_title" if "market_title" in out.columns else "market" if "market" in out.columns else None
+        if market_col:
+            out = out[out[market_col].astype(str).str.contains(market_search, case=False, na=False)]
+    if wallet_search:
+        wallet_col = "trader_wallet" if "trader_wallet" in out.columns else "wallet_copied" if "wallet_copied" in out.columns else None
+        if wallet_col:
+            out = out[out[wallet_col].astype(str).str.contains(wallet_search, case=False, na=False)]
+    if "confidence" in out.columns:
+        out = out[out["confidence"].fillna(0).astype(float) >= float(min_confidence)]
+    if signal_label != "All" and "signal_label" in out.columns:
+        out = out[out["signal_label"].astype(str) == signal_label]
+    if position_status != "All" and "status" in out.columns:
+        out = out[out["status"].astype(str) == position_status]
+    return out
+
+
 def inject_styles():
     st.markdown(
         """
