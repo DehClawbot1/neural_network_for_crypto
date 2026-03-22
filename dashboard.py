@@ -414,8 +414,10 @@ def render_action_board(signals_df, positions_df):
     ranked = ranked.head(10).copy()
 
     open_markets = set()
+    positions_lookup = {}
     if not positions_df.empty and "market" in positions_df.columns:
         open_markets = set(positions_df["market"].dropna().astype(str).tolist())
+        positions_lookup = positions_df.drop_duplicates(subset=["market"], keep="last").set_index("market").to_dict("index")
 
     rows = []
     for _, row in ranked.iterrows():
@@ -427,6 +429,9 @@ def render_action_board(signals_df, positions_df):
         entry_price_now = float(row.get("current_price", row.get("entry_price", 0.0)) or 0.0)
         live_market_price = float(row.get("market_last_trade_price", row.get("current_price", 0.0)) or 0.0)
         price_delta = live_market_price - entry_price_now
+        position_row = positions_lookup.get(market, {})
+        open_pnl = float(position_row.get("unrealized_pnl", 0.0) or 0.0) if position_row else 0.0
+        shares = float(position_row.get("shares", 0.0) or 0.0) if position_row else 0.0
         already_open = market in open_markets
 
         if already_open and confidence < 0.50:
@@ -450,6 +455,8 @@ def render_action_board(signals_df, positions_df):
                 "entry_price_now": round(entry_price_now, 4),
                 "live_market_price": round(live_market_price, 4),
                 "price_delta": round(price_delta, 4),
+                "shares": round(shares, 4),
+                "paper_profit_usdc": round(open_pnl, 4),
                 "p_tp_before_sl": round(p_tp, 3),
                 "expected_return": round(expected_return, 4),
                 "edge_score": round(edge, 4),
