@@ -867,7 +867,48 @@ def render_alerts(alerts_df):
         st.info("No alerts generated yet.")
         return
 
-    st.dataframe(alerts_df.tail(20), width="stretch")
+    view = alerts_df.copy()
+    time_col = "timestamp" if "timestamp" in view.columns else "updated_at" if "updated_at" in view.columns else None
+    alert_col = "alert_type" if "alert_type" in view.columns else "type" if "type" in view.columns else None
+    severity_col = "severity" if "severity" in view.columns else "level" if "level" in view.columns else None
+    market_col = "market" if "market" in view.columns else "market_title" if "market_title" in view.columns else None
+
+    alert_type_filter = st.selectbox("Alert type", ["All"] + sorted(view[alert_col].dropna().astype(str).unique().tolist()) if alert_col else ["All"], key="alerts_type_filter")
+    severity_filter = st.selectbox("Severity", ["All"] + sorted(view[severity_col].dropna().astype(str).unique().tolist()) if severity_col else ["All"], key="alerts_severity_filter")
+    market_filter = st.text_input("Market filter", "", key="alerts_market_filter")
+    time_range_hours = st.selectbox("Time range (hours)", [1, 6, 12, 24, 72, 168], index=3, key="alerts_time_range")
+
+    if alert_col and alert_type_filter != "All":
+        view = view[view[alert_col].astype(str) == alert_type_filter]
+    if severity_col and severity_filter != "All":
+        view = view[view[severity_col].astype(str) == severity_filter]
+    if market_filter and market_col:
+        view = view[view[market_col].astype(str).str.contains(market_filter, case=False, na=False)]
+    if time_col:
+        ts = pd.to_datetime(view[time_col], errors="coerce", utc=True)
+        cutoff = pd.Timestamp.utcnow() - pd.Timedelta(hours=float(time_range_hours))
+        view = view[ts >= cutoff]
+
+    alerts_in_last_hour = 0
+    if time_col:
+        ts_all = pd.to_datetime(alerts_df[time_col], errors="coerce", utc=True)
+        alerts_in_last_hour = int((ts_all >= (pd.Timestamp.utcnow() - pd.Timedelta(hours=1))).fillna(False).sum())
+    critical_alerts = int(view[severity_col].astype(str).str.lower().str.contains("critical", na=False).sum()) if severity_col and not view.empty else 0
+    warning_alerts = int(view[severity_col].astype(str).str.lower().str.contains("warning", na=False).sum()) if severity_col and not view.empty else 0
+    stale_data_alerts = int(view[alert_col].astype(str).str.lower().str.contains("stale", na=False).sum()) if alert_col and not view.empty else 0
+    entry_alerts = int(view[alert_col].astype(str).str.lower().str.contains("entry", na=False).sum()) if alert_col and not view.empty else 0
+    exit_alerts = int(view[alert_col].astype(str).str.lower().str.contains("exit", na=False).sum()) if alert_col and not view.empty else 0
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("Alerts in Last Hour", alerts_in_last_hour)
+    c2.metric("Critical Alerts", critical_alerts)
+    c3.metric("Warning Alerts", warning_alerts)
+    c4.metric("Stale Data Alerts", stale_data_alerts)
+    c5.metric("Entry Alerts", entry_alerts)
+    c6.metric("Exit Alerts", exit_alerts)
+
+    display_cols = [c for c in [time_col, market_col, alert_col, severity_col, "signal_label", "confidence", "message"] if c and c in view.columns]
+    st.dataframe(view.sort_index(ascending=False).tail(50)[display_cols] if display_cols else view.tail(50), width="stretch", hide_index=True)
 
 
 def render_simulated_decisions(positions_df, closed_positions_df):
