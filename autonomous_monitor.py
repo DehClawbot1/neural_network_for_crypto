@@ -17,6 +17,7 @@ class AutonomousMonitor:
         self.logs_dir = Path(logs_dir)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.output_file = self.logs_dir / "system_health.csv"
+        self.heartbeat_file = self.logs_dir / "service_heartbeats.csv"
 
     def _latest_timestamp(self, df):
         if df is None or df.empty:
@@ -27,6 +28,23 @@ class AutonomousMonitor:
                 if not ts.empty:
                     return ts.max().strftime("%Y-%m-%d %H:%M:%S")
         return None
+
+    def _append(self, path: Path, record: dict):
+        pd.DataFrame([record]).to_csv(path, mode="a", header=not path.exists(), index=False)
+
+    def write_heartbeat(self, service: str, status: str = "ok", message: str = "", extra: dict | None = None):
+        record = {
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+            "service": service,
+            "status": status,
+            "message": message,
+        }
+        if extra:
+            record.update(extra)
+        self._append(self.heartbeat_file, record)
+
+    def write_failure(self, service: str, error: str, extra: dict | None = None):
+        self.write_heartbeat(service=service, status="error", message=str(error), extra=extra)
 
     def write_status(self, signals_df=None, trades_df=None, alerts_df=None, open_positions_df=None):
         record = {
@@ -43,6 +61,11 @@ class AutonomousMonitor:
             "last_position_timestamp": self._latest_timestamp(open_positions_df),
             "status": "ok",
         }
-        df = pd.DataFrame([record])
-        df.to_csv(self.output_file, mode="a", header=not self.output_file.exists(), index=False)
+        self._append(self.output_file, record)
+        self.write_heartbeat("supervisor_cycle", status="ok", message="cycle_completed", extra={
+            "signal_rows": record["signal_rows"],
+            "trade_rows": record["trade_rows"],
+            "alert_rows": record["alert_rows"],
+            "open_positions": record["open_positions"],
+        })
         logging.info("Saved autonomous health status to %s", self.output_file)

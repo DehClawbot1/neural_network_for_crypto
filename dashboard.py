@@ -19,6 +19,7 @@ WHALES_FILE = LOGS_DIR / "whales.csv"
 ALERTS_FILE = LOGS_DIR / "alerts.csv"
 MODEL_STATUS_FILE = LOGS_DIR / "model_status.csv"
 SYSTEM_HEALTH_FILE = LOGS_DIR / "system_health.csv"
+SERVICE_HEARTBEATS_FILE = LOGS_DIR / "service_heartbeats.csv"
 WEIGHTS_FILE = BASE_DIR / "weights" / "ppo_polytrader.zip"
 TRADER_ANALYTICS_FILE = LOGS_DIR / "trader_analytics.csv"
 BACKTEST_FILE = LOGS_DIR / "backtest_summary.csv"
@@ -1566,6 +1567,7 @@ def main():
     alerts_df = load_csv(ALERTS_FILE)
     model_status_df = load_csv(MODEL_STATUS_FILE)
     system_health_df = load_csv(SYSTEM_HEALTH_FILE)
+    service_heartbeats_df = load_csv(SERVICE_HEARTBEATS_FILE)
     positions_df = load_csv(POSITIONS_FILE)
     closed_positions_df = load_csv(CLOSED_POSITIONS_FILE)
     supervised_eval_df = load_csv(SUPERVISED_EVAL_FILE)

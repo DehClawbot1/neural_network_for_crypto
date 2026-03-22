@@ -251,8 +251,10 @@ def main_loop():
 
             # 1. Gather public market context + public wallet activity
             markets_df = fetch_btc_markets()
+            autonomous_monitor.write_heartbeat("market_monitor", status="ok", message="markets_fetched", extra={"rows": len(markets_df) if markets_df is not None else 0})
             save_market_snapshot(markets_df)
             signals_df = run_scraper_cycle()
+            autonomous_monitor.write_heartbeat("signal_engine", status="ok", message="signals_scraped", extra={"rows": len(signals_df) if signals_df is not None else 0})
 
             if signals_df.empty:
                 logging.info("No actionable signals found on this pass.")
@@ -262,7 +264,9 @@ def main_loop():
 
             # 2. Build whale summaries and detect alerts from public data
             whale_tracker.write_summary(signals_df)
+            autonomous_monitor.write_heartbeat("whale_tracker", status="ok", message="whale_summary_written", extra={"rows": len(signals_df) if signals_df is not None else 0})
             alerts_engine.process_alerts(markets_df, previous_markets_df, signals_df)
+            autonomous_monitor.write_heartbeat("alerts_engine", status="ok", message="alerts_processed")
             previous_markets_df = markets_df.copy()
 
             # 3. Build features, run supervised inference, and score paper-trading opportunities
@@ -373,8 +377,10 @@ def main_loop():
             position_manager.update_mark_to_market(scored_df)
             position_manager.apply_exit_rules(alerts_df)
             open_positions_df = position_manager.get_open_positions()
+            autonomous_monitor.write_heartbeat("position_manager", status="ok", message="positions_updated", extra={"open_positions": len(open_positions_df) if open_positions_df is not None else 0})
             autonomous_monitor.write_status(trader_signals_df, trades_df, alerts_df, open_positions_df)
             retrainer.maybe_retrain()
+            autonomous_monitor.write_heartbeat("retrainer", status="ok", message="retrain_checked")
 
             logging.info("Cycle complete. Sleeping for 60 seconds...")
             time.sleep(60)
@@ -383,6 +389,7 @@ def main_loop():
             logging.info("Supervisor halted manually by user.")
             break
         except Exception as e:
+            autonomous_monitor.write_failure("supervisor", str(e))
             logging.error(f"Critical error in main loop: {e}. Auto-restarting in 60 seconds...")
             time.sleep(60)
 
