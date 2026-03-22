@@ -499,26 +499,58 @@ def badge_class(label: str) -> str:
 
 
 def render_factor_matrix(signals_df):
-    st.markdown('<div class="section-title">Confidence Matrix</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Signal Explanation Panel</div>', unsafe_allow_html=True)
     if signals_df.empty:
         st.info("No ranked signals available yet.")
         return
 
-    top_row = signals_df.sort_values(by="confidence", ascending=False).iloc[0].to_dict() if "confidence" in signals_df.columns else signals_df.iloc[0].to_dict()
-    factor_df = pd.DataFrame(
-        [
-            {"factor": "Whale Pressure", "score": float(top_row.get("whale_pressure", 0.0))},
-            {"factor": "Market Structure", "score": float(top_row.get("market_structure_score", 0.0))},
-            {"factor": "Volatility Risk", "score": float(top_row.get("volatility_risk", 0.0))},
-            {"factor": "Time Decay", "score": float(top_row.get("time_decay_score", 0.0))},
-            {"factor": "Liquidity", "score": float(top_row.get("liquidity_score", 0.0))},
-            {"factor": "Volume", "score": float(top_row.get("volume_score", 0.0))},
-        ]
-    )
-    st.caption(f"Top signal: {top_row.get('market', top_row.get('market_title', 'Unknown Market'))}")
-    fig = px.bar(factor_df, x="score", y="factor", orientation="h", title="Top Signal Factor Breakdown")
-    fig.update_layout(height=360, yaxis={"categoryorder": "total ascending"})
+    view = signals_df.copy()
+    if "confidence" in view.columns:
+        view = view.sort_values(by="confidence", ascending=False)
+    view = view.head(50).reset_index(drop=True)
+
+    options = []
+    for idx, row in view.iterrows():
+        market = row.get("market_title", row.get("market", f"Signal {idx + 1}"))
+        side = row.get("outcome_side", row.get("side", "?"))
+        label = row.get("signal_label", "UNKNOWN")
+        options.append(f"{idx + 1}. {market} | {side} | {label}")
+
+    selected = st.selectbox("Select signal to explain", options)
+    selected_idx = options.index(selected)
+    selected_row = view.iloc[selected_idx].to_dict()
+
+    factor_specs = [
+        ("Whale Pressure", "whale_pressure", "Higher usually means stronger wallet-following pressure."),
+        ("Market Structure", "market_structure_score", "Higher suggests cleaner structure / setup quality."),
+        ("Volatility Risk", "volatility_risk", "Higher means more risk / instability, usually worse."),
+        ("Time Decay", "time_decay_score", "Higher time decay penalty is usually worse near expiry/event."),
+        ("Liquidity", "liquidity_score", "Higher usually means better execution quality."),
+        ("Volume", "volume_score", "Higher usually means healthier participation / tradability."),
+        ("Confidence", "confidence", "Higher means stronger model conviction."),
+        ("Edge Score", "edge_score", "Higher means stronger expected advantage."),
+    ]
+
+    rows = []
+    for label, col, desc in factor_specs:
+        value = selected_row.get(col)
+        missing = pd.isna(value)
+        rows.append({
+            "factor": label,
+            "score": value if not missing else "N/A",
+            "direction_meaning": desc,
+            "missing": "⚠ missing" if missing else "",
+        })
+
+    factor_df = pd.DataFrame(rows)
+    numeric_plot = factor_df.copy()
+    numeric_plot["numeric_score"] = pd.to_numeric(numeric_plot["score"], errors="coerce")
+
+    st.caption(f"Explaining: {selected_row.get('market_title', selected_row.get('market', 'Unknown Market'))}")
+    fig = px.bar(numeric_plot, x="numeric_score", y="factor", orientation="h", title="Signal Factor Breakdown")
+    fig.update_layout(height=420, yaxis={"categoryorder": "total ascending"})
     st.plotly_chart(fig, width="stretch")
+    st.dataframe(factor_df, width="stretch", hide_index=True)
 
 
 def render_top_opportunities(signals_df):
