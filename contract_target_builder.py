@@ -5,13 +5,15 @@ import pandas as pd
 
 class ContractTargetBuilder:
     """
-    Build contract-level labels from ranked signal history and subsequent contract-price movement.
+    Build contract-level labels from real token-level CLOB price history anchored to signal timestamps.
     Research/paper-trading only.
     """
 
     def __init__(self, logs_dir="logs"):
         self.logs_dir = Path(logs_dir)
         self.signals_file = self.logs_dir / "signals.csv"
+        self.markets_file = self.logs_dir / "markets.csv"
+        self.clob_history_file = self.logs_dir / "clob_price_history.csv"
         self.output_file = self.logs_dir / "contract_targets.csv"
 
     def _safe_read(self, path):
@@ -22,55 +24,110 @@ class ContractTargetBuilder:
         except Exception:
             return pd.DataFrame()
 
-    def build(self, horizon_rows=12, tp_move=0.04, sl_move=0.03):
-        df = self._safe_read(self.signals_file)
-        if df.empty or "market" not in df.columns or "current_price" not in df.columns:
+    def _select_token_id(self, signal_row, market_row):
+        side = str(signal_row.get("side", signal_row.get("outcome", signal_row.get("outcome_side", "YES")))).upper()
+        if side == "NO":
+            return market_row.get("no_token_id")
+        return market_row.get("yes_token_id")
+
+    def _compute_path_labels(self, entry_price, future_prices, tp_move, sl_move):
+        if future_prices.empty:
+            return None, None, None, None, None
+
+        first_future = float(future_prices.iloc[-1])
+        forward_return = (first_future - entry_price) / entry_price if entry_price else None
+        moves = [(float(price) - entry_price) for price in future_prices]
+        mfe = max(moves) if moves else None
+        mae = min(moves) if moves else None
+        tp_hit_idx = next((i for i, move in enumerate(moves) if move >= tp_move), None)
+        sl_hit_idx = next((i for i, move in enumerate(moves) if move <= -sl_move), None)
+        tp_before_sl = int(tp_hit_idx is not None and (sl_hit_idx is None or tp_hit_idx < sl_hit_idx))
+        target_up = int((forward_return or 0) > 0)
+        return forward_return, tp_before_sl, mfe, mae, target_up
+
+    def build(self, forward_minutes=15, max_hold_minutes=60, tp_move=0.04, sl_move=0.03):
+        signals_df = self._safe_read(self.signals_file)
+        markets_df = self._safe_read(self.markets_file)
+        history_df = self._safe_read(self.clob_history_file)
+
+        if signals_df.empty or markets_df.empty or history_df.empty:
+            return pd.DataFrame()
+        if "market" not in signals_df.columns or "question" not in markets_df.columns:
             return pd.DataFrame()
 
-        df = df.copy()
-        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce") if "timestamp" in df.columns else pd.NaT
-        df = df.sort_values(["market", "timestamp"]).reset_index(drop=True)
+        signals_df = signals_df.copy()
+        signals_df["timestamp"] = pd.to_datetime(signals_df["timestamp"], utc=True, errors="coerce")
+        history_df = history_df.copy()
+        history_df["timestamp"] = pd.to_datetime(history_df["timestamp"], utc=True, errors="coerce")
+        history_df = history_df.dropna(subset=["timestamp", "token_id"]).sort_values(["token_id", "timestamp"]).reset_index(drop=True)
 
-        grouped_rows = []
-        for market, group in df.groupby("market"):
-            group = group.reset_index(drop=True)
-            group["future_price"] = group["current_price"].shift(-horizon_rows)
-            group["forward_return_15m"] = (group["future_price"] - group["current_price"]) / group["current_price"]
-            group["target_up"] = (group["forward_return_15m"] > 0).astype(int)
+        market_lookup = markets_df.drop_duplicates(subset=["question"], keep="last").set_index("question").to_dict("index")
 
-            tp_labels = []
-            mfe_values = []
-            mae_values = []
-            for idx, row in group.iterrows():
-                entry_price = float(row.get("current_price", 0.5))
-                future_window = group.iloc[idx + 1 : idx + 1 + horizon_rows]
-                if future_window.empty:
-                    tp_labels.append(None)
-                    mfe_values.append(None)
-                    mae_values.append(None)
-                    continue
+        rows = []
+        for _, signal_row in signals_df.iterrows():
+            market_title = signal_row.get("market")
+            market_row = market_lookup.get(market_title)
+            if not market_row:
+                continue
 
-                moves = (future_window["current_price"].astype(float) - entry_price).tolist()
-                mfe = max(moves) if moves else None
-                mae = min(moves) if moves else None
-                tp_hit_idx = next((i for i, move in enumerate(moves) if move >= tp_move), None)
-                sl_hit_idx = next((i for i, move in enumerate(moves) if move <= -sl_move), None)
-                tp_before_sl = int(tp_hit_idx is not None and (sl_hit_idx is None or tp_hit_idx < sl_hit_idx))
+            token_id = self._select_token_id(signal_row.to_dict(), market_row)
+            if not token_id:
+                continue
 
-                tp_labels.append(tp_before_sl)
-                mfe_values.append(mfe)
-                mae_values.append(mae)
+            token_history = history_df[history_df["token_id"].astype(str) == str(token_id)].copy()
+            if token_history.empty:
+                continue
 
-            group["tp_before_sl_60m"] = tp_labels
-            group["mfe_60m"] = mfe_values
-            group["mae_60m"] = mae_values
-            grouped_rows.append(group)
+            signal_ts = signal_row.get("timestamp")
+            if pd.isna(signal_ts):
+                continue
 
-        result = pd.concat(grouped_rows, ignore_index=True).dropna(subset=["future_price", "forward_return_15m"])
-        return result
+            history_before = token_history[token_history["timestamp"] <= signal_ts]
+            if history_before.empty:
+                continue
+            anchor_row = history_before.iloc[-1]
+            entry_price = float(anchor_row.get("price", signal_row.get("current_price", 0.5)))
 
-    def write(self, horizon_rows=12, tp_move=0.04, sl_move=0.03):
-        df = self.build(horizon_rows=horizon_rows, tp_move=tp_move, sl_move=sl_move)
+            future_window = token_history[
+                (token_history["timestamp"] > signal_ts)
+                & (token_history["timestamp"] <= signal_ts + pd.Timedelta(minutes=max_hold_minutes))
+            ].copy()
+            if future_window.empty:
+                continue
+
+            forward_window = future_window[future_window["timestamp"] <= signal_ts + pd.Timedelta(minutes=forward_minutes)]
+            future_prices = forward_window["price"] if not forward_window.empty else future_window["price"].head(1)
+            forward_return, tp_before_sl, mfe, mae, target_up = self._compute_path_labels(
+                entry_price,
+                future_prices,
+                tp_move,
+                sl_move,
+            )
+
+            row = signal_row.to_dict()
+            row.update(
+                {
+                    "token_id": token_id,
+                    "entry_price": entry_price,
+                    "anchor_timestamp": anchor_row.get("timestamp"),
+                    "forward_return_15m": forward_return,
+                    "tp_before_sl_60m": tp_before_sl,
+                    "mfe_60m": mfe,
+                    "mae_60m": mae,
+                    "target_up": target_up,
+                }
+            )
+            rows.append(row)
+
+        return pd.DataFrame(rows)
+
+    def write(self, forward_minutes=15, max_hold_minutes=60, tp_move=0.04, sl_move=0.03):
+        df = self.build(
+            forward_minutes=forward_minutes,
+            max_hold_minutes=max_hold_minutes,
+            tp_move=tp_move,
+            sl_move=sl_move,
+        )
         if not df.empty:
             df.to_csv(self.output_file, index=False)
         return df
