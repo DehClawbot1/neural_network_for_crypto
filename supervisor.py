@@ -76,6 +76,15 @@ def prepare_observation(feature_row, legacy=False):
     return obs
 
 
+def safe_read_csv(path):
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(path, engine="python", on_bad_lines="skip")
+    except Exception:
+        return pd.DataFrame()
+
+
 def append_csv_record(path, record):
     df = pd.DataFrame([record])
     df.to_csv(path, mode="a", header=not os.path.exists(path), index=False)
@@ -244,13 +253,13 @@ def main_loop():
                     position_manager.open_position(signal_row, size_usdc=size, fill_price=fill_price)
 
             # 5. Phase 2 analytics outputs
-            trades_df = pd.read_csv(SUMMARY_FILE) if os.path.exists(SUMMARY_FILE) else pd.DataFrame()
+            trades_df = safe_read_csv(SUMMARY_FILE)
             trader_signals_df = scored_df.rename(columns={"trader_wallet": "wallet_copied", "market_title": "market"})
             trader_analytics.write(trader_signals_df, trades_df)
             backtester.write(trader_signals_df)
             dataset_builder.write()
 
-            alerts_df = pd.read_csv("logs/alerts.csv") if os.path.exists("logs/alerts.csv") else pd.DataFrame()
+            alerts_df = safe_read_csv("logs/alerts.csv")
             position_manager.update_mark_to_market(scored_df)
             position_manager.apply_exit_rules(alerts_df)
             open_positions_df = position_manager.get_open_positions()
