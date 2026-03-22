@@ -798,6 +798,32 @@ def render_whale_tracker(whales_df):
     cols = [c for c in [wallet_col, "username", "profit", "volume", "positionValue", market_col] if c and c in whales_df.columns]
     st.dataframe(whales_df[cols].head(20) if cols else whales_df.head(20), width="stretch", hide_index=True)
 
+    if wallet_col:
+        wallet_counts = whales_df[wallet_col].astype(str).value_counts().head(15).reset_index()
+        wallet_counts.columns = [wallet_col, "actions"]
+        st.plotly_chart(px.bar(wallet_counts, x=wallet_col, y="actions", title="Trades / Actions by Wallet"), width="stretch")
+
+    if market_col:
+        market_counts = whales_df[market_col].astype(str).value_counts().head(15).reset_index()
+        market_counts.columns = [market_col, "wallet_count"]
+        st.plotly_chart(px.bar(market_counts, x=market_col, y="wallet_count", title="Wallet Concentration by Market"), width="stretch")
+
+    if wallet_col and "profit" in whales_df.columns:
+        profit_df = whales_df.copy()
+        profit_df["profit"] = pd.to_numeric(profit_df["profit"], errors="coerce")
+        profit_df = profit_df.dropna(subset=["profit"]).sort_values("profit", ascending=False).head(15)
+        if not profit_df.empty:
+            st.plotly_chart(px.bar(profit_df, x=wallet_col, y="profit", title="Top Wallets by Profitability"), width="stretch")
+
+    time_col = "timestamp" if "timestamp" in whales_df.columns else "updated_at" if "updated_at" in whales_df.columns else None
+    if wallet_col and time_col:
+        activity_df = whales_df.copy()
+        activity_df[time_col] = pd.to_datetime(activity_df[time_col], errors="coerce")
+        activity_df = activity_df.dropna(subset=[time_col])
+        if not activity_df.empty:
+            timeline = activity_df.groupby(activity_df[time_col].dt.floor("H")).size().reset_index(name="activity_count")
+            st.plotly_chart(px.line(timeline, x=time_col, y="activity_count", title="Wallet Activity Over Time"), width="stretch")
+
 
 def render_market_distribution(distribution_df):
     st.markdown('<div class="section-title">Whale Market Distribution</div>', unsafe_allow_html=True)
