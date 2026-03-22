@@ -191,25 +191,38 @@ The `live-test` branch now contains scaffolding such as:
 - `reconciliation_service.py`
 - `live_risk_manager.py`
 - `db.py`
+- `incident_manager.py`
 
-Those files are intended for isolated authenticated execution experiments and should not be confused with the paper-only main line.
+Those files are intended for isolated authenticated execution experiments and stronger monitoring / operational safety, and should not be confused with the paper-only main line.
+
+Recent `live-test` work also added:
+- backend alert normalization (`alert_id`, `severity`, `status`, `source_module`, `message`)
+- system health snapshots in `logs/system_health.csv`
+- service heartbeats in `logs/service_heartbeats.csv`
+- incident lifecycle logging in `logs/incidents.csv`
+- dashboard-side anomaly detection, reconciliation, and readiness checks
 
 ## UI
 
 ### `dashboard.py`
-Streamlit dashboard with:
-- **Overview**
-- **Opportunities**
-- **Markets & Whales**
-- **Learning**
-- **Raw Data**
+Streamlit dashboard on `live-test` now uses a monitoring-oriented layout:
+- **System Status**
+- **Signals & Opportunities**
+- **Positions & PnL**
+- **Markets, Whales & Alerts**
+- **Models & Data Quality**
 
-Recent UI improvements include:
-- better opportunity cards
-- confidence bars
-- most successful trades view
-- replay metrics
-- learning metrics surfaced in the browser
+Recent `live-test` UI improvements include:
+- real data freshness panels instead of fake refresh timestamps
+- sidebar dashboard controls and global filters
+- top opportunity cards with safer `N/A` handling
+- ranked opportunity table with CSV export
+- grouped recommended paper actions
+- paper equity / drawdown charts
+- richer positions and closed-trade ledger views
+- market / whale / alert monitoring subtabs
+- model performance and data-quality readiness views
+- debug raw logs moved into a collapsible section
 
 ## Quick start
 
