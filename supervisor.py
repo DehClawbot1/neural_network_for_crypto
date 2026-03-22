@@ -19,6 +19,8 @@ from simulation_engine import SimulationEngine
 from autonomous_monitor import AutonomousMonitor
 from retrainer import Retrainer
 from position_manager import PositionManager
+from model_inference import ModelInference
+from strategy_layers import EntryRuleLayer
 
 # Configure logging for zero-intervention monitoring
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -116,6 +118,13 @@ def log_ranked_signal(signal_row):
     append_csv_record(SIGNALS_FILE, record)
 
 
+def choose_action(signal_row, entry_rule: EntryRuleLayer):
+    if not entry_rule.should_enter(signal_row):
+        return 0
+    edge_score = float(signal_row.get("edge_score", 0.0) or 0.0)
+    return 2 if edge_score >= 0.04 else 1
+
+
 def execute_paper_trade(action, signal_row):
     """Simulates a trade fill and logs the hypothetical position."""
     if action == 0:
@@ -165,11 +174,12 @@ def main_loop():
 
     brain = load_brain()
     if not brain:
-        logging.error("Halting execution: Missing trained brain.")
-        return
+        logging.warning("RL brain unavailable. Continuing with supervised-first ranking path.")
 
     feature_builder = FeatureBuilder()
     signal_engine = SignalEngine()
+    model_inference = ModelInference()
+    entry_rule = EntryRuleLayer()
     whale_tracker = WhaleTracker()
     alerts_engine = AlertsEngine()
     trader_analytics = TraderAnalytics()
@@ -201,9 +211,10 @@ def main_loop():
             alerts_engine.process_alerts(markets_df, previous_markets_df, signals_df)
             previous_markets_df = markets_df.copy()
 
-            # 3. Build features and score paper-trading opportunities
+            # 3. Build features, run supervised inference, and score paper-trading opportunities
             features_df = feature_builder.build_features(signals_df, markets_df)
-            scored_df = signal_engine.score_features(features_df)
+            inferred_df = model_inference.run(features_df)
+            scored_df = signal_engine.score_features(inferred_df)
 
             if scored_df.empty:
                 logging.info("No scored signals generated on this pass.")
@@ -211,7 +222,8 @@ def main_loop():
                 time.sleep(60)
                 continue
 
-            scored_df = scored_df.sort_values(by=["confidence", "normalized_trade_size"], ascending=[False, False])
+            sort_cols = [c for c in ["edge_score", "p_tp_before_sl", "confidence", "normalized_trade_size"] if c in scored_df.columns]
+            scored_df = scored_df.sort_values(by=sort_cols, ascending=[False] * len(sort_cols))
 
             # 3. Log top-ranked paper opportunities (research output, not betting advice)
             top_n = min(5, len(scored_df))
@@ -230,19 +242,10 @@ def main_loop():
                 log_ranked_signal(ranked_row.to_dict())
             print("======================================\n")
 
-            # 4. Evaluate scored rows with RL model, then simulate paper execution only
+            # 4. Use supervised-first ranking + entry rules for paper execution
             for _, row in scored_df.iterrows():
                 signal_row = row.to_dict()
-                obs = prepare_observation(signal_row)
-
-                try:
-                    action, _states = brain.predict(obs, deterministic=True)
-                except Exception:
-                    # Backward-compatible fallback for older 4-feature models
-                    legacy_obs = prepare_observation(signal_row, legacy=True)
-                    action, _states = brain.predict(legacy_obs, deterministic=True)
-
-                action_val = int(action.item() if hasattr(action, "item") else action[0])
+                action_val = choose_action(signal_row, entry_rule)
 
                 execute_paper_trade(action_val, signal_row)
 

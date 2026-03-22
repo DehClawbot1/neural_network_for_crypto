@@ -25,14 +25,18 @@ class SignalEngine:
         market_structure_score = float(row.get("market_structure_score", 0.5))
         volatility_risk = float(row.get("volatility_risk", 0.5))
         time_decay_score = float(row.get("time_decay_score", 0.5))
+        p_tp = float(row.get("p_tp_before_sl", 0.0) or 0.0)
+        expected_return = float(row.get("expected_return", 0.0) or 0.0)
+        edge_score = float(row.get("edge_score", 0.0) or 0.0)
 
-        confidence = (
+        heuristic_confidence = (
             whale_pressure * 0.40
             + market_structure_score * 0.35
             + (1.0 - volatility_risk) * 0.15
             + (1.0 - time_decay_score) * 0.10
         )
-        confidence = float(np.clip(confidence, 0.0, 1.0))
+        model_confidence = np.clip((p_tp * 0.75) + np.clip(expected_return * 5.0, -1.0, 1.0) * 0.10 + np.clip(edge_score * 8.0, -1.0, 1.0) * 0.15, 0.0, 1.0)
+        confidence = float(np.clip(max(heuristic_confidence, model_confidence), 0.0, 1.0))
 
         if confidence < 0.45:
             action_code = 0
@@ -53,10 +57,11 @@ class SignalEngine:
 
     def _build_reason(self, row: dict, confidence: float):
         return (
+            f"p_tp={float(row.get('p_tp_before_sl', 0.0) or 0.0):.2f}, "
+            f"expected_return={float(row.get('expected_return', 0.0) or 0.0):.4f}, "
+            f"edge_score={float(row.get('edge_score', 0.0) or 0.0):.4f}, "
             f"whale_pressure={float(row.get('whale_pressure', 0.5)):.2f}, "
             f"market_structure={float(row.get('market_structure_score', 0.5)):.2f}, "
-            f"volatility_risk={float(row.get('volatility_risk', 0.5)):.2f}, "
-            f"time_decay={float(row.get('time_decay_score', 0.5)):.2f}, "
             f"confidence={confidence:.2f}"
         )
 
