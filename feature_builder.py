@@ -27,44 +27,46 @@ class FeatureBuilder:
     def __init__(self):
         self.wallet_stats = {}
 
-    def update_wallet_history(self, trades_df: pd.DataFrame):
-        if trades_df is None or trades_df.empty:
-            return
-
-        time_col = "timestamp" if "timestamp" in trades_df.columns else None
-        size_col = "size" if "size" in trades_df.columns else "size_usdc" if "size_usdc" in trades_df.columns else None
-        wallet_col = "trader_wallet" if "trader_wallet" in trades_df.columns else "wallet_copied" if "wallet_copied" in trades_df.columns else None
+    def update_wallet_history(self, trade_row: dict):
+        wallet_col = "trader_wallet" if "trader_wallet" in trade_row else "wallet_copied" if "wallet_copied" in trade_row else None
+        size_col = "size" if "size" in trade_row else "size_usdc" if "size_usdc" in trade_row else None
         if wallet_col is None or size_col is None:
             return
 
-        df = trades_df.copy()
-        if time_col:
-            df[time_col] = pd.to_datetime(df[time_col], utc=True, errors="coerce")
-            df = df.sort_values(time_col)
+        wallet = trade_row.get(wallet_col)
+        if not wallet:
+            return
 
-        for wallet, group in df.groupby(wallet_col):
-            avg_size = _safe_float(group[size_col].mean(), 1.0)
-            count = int(group[size_col].count())
-            stats = {
-                "avg_size": max(avg_size, 1.0),
-                "trade_count": count,
-                "win_rate": np.nan,
-                "alpha_30d": np.nan,
-                "avg_forward_return_15m": np.nan,
-                "tp_precision": np.nan,
-                "recent_streak": 0,
-                "same_market_history": 0,
-            }
+        prior = self.wallet_stats.get(wallet, {"sizes": [], "forward_returns": [], "tp_labels": [], "market_counts": {}})
+        sizes = prior.get("sizes", [])
+        sizes.append(_safe_float(trade_row.get(size_col, 0.0), 0.0))
+        forward_returns = prior.get("forward_returns", [])
+        if "future_return" in trade_row and pd.notna(trade_row.get("future_return")):
+            forward_returns.append(_safe_float(trade_row.get("future_return"), 0.0))
+        tp_labels = prior.get("tp_labels", [])
+        if "tp_before_sl_60m" in trade_row and pd.notna(trade_row.get("tp_before_sl_60m")):
+            tp_labels.append(int(trade_row.get("tp_before_sl_60m")))
+        market_counts = prior.get("market_counts", {})
+        market_title = trade_row.get("market_title") or trade_row.get("market")
+        if market_title:
+            market_counts[market_title] = market_counts.get(market_title, 0) + 1
 
-            if "future_return" in group.columns:
-                stats["avg_forward_return_15m"] = _safe_float(group["future_return"].mean(), np.nan)
-                stats["win_rate"] = _safe_float((group["future_return"] > 0).mean(), np.nan)
-            if "tp_before_sl" in group.columns:
-                stats["tp_precision"] = _safe_float(group["tp_before_sl"].mean(), np.nan)
-            if "alpha_30d" in group.columns:
-                stats["alpha_30d"] = _safe_float(group["alpha_30d"].iloc[-1], np.nan)
-
-            self.wallet_stats[wallet] = stats
+        recent_forward = forward_returns[-200:]
+        recent_tp = tp_labels[-200:]
+        self.wallet_stats[wallet] = {
+            "sizes": sizes,
+            "forward_returns": forward_returns,
+            "tp_labels": tp_labels,
+            "market_counts": market_counts,
+            "avg_size": max(_safe_float(np.mean(sizes), 1.0), 1.0),
+            "trade_count": len(sizes),
+            "win_rate": _safe_float(np.mean([1 if x > 0 else 0 for x in recent_forward]), np.nan) if recent_forward else np.nan,
+            "alpha_30d": _safe_float(np.mean(recent_forward), np.nan) if recent_forward else np.nan,
+            "avg_forward_return_15m": _safe_float(np.mean(recent_forward), np.nan) if recent_forward else np.nan,
+            "tp_precision": _safe_float(np.mean(recent_tp), np.nan) if recent_tp else np.nan,
+            "recent_streak": int(sum(1 for x in recent_forward[-5:] if x > 0)) if recent_forward else 0,
+            "same_market_history": market_counts.get(market_title, 0) if market_title else 0,
+        }
 
     def _normalized_trade_size(self, wallet: str, size: float) -> float:
         wallet_info = self.wallet_stats.get(wallet, {"avg_size": 1.0})
@@ -78,14 +80,16 @@ class FeatureBuilder:
             return 0.5
         return _clip01(value)
 
-    def _time_left_feature(self, end_date) -> float:
+    def _time_left_feature(self, end_date, reference_time=None) -> float:
         if not end_date:
             return 0.5
 
         try:
             end_dt = datetime.fromisoformat(str(end_date).replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            seconds_left = max((end_dt - now).total_seconds(), 0)
+            ref_dt = pd.to_datetime(reference_time, utc=True, errors="coerce") if reference_time is not None else datetime.now(timezone.utc)
+            if pd.isna(ref_dt):
+                ref_dt = datetime.now(timezone.utc)
+            seconds_left = max((end_dt - ref_dt).total_seconds(), 0)
             return _clip01(seconds_left / (7 * 24 * 3600))
         except Exception:
             return 0.5
@@ -114,7 +118,7 @@ class FeatureBuilder:
         signal_price = _clip01(_safe_float(signal.get("price", 0.5), 0.5))
 
         market_row = market_row or {}
-        time_left = self._time_left_feature(market_row.get("end_date"))
+        time_left = self._time_left_feature(market_row.get("end_date"), signal.get("timestamp"))
         liquidity = _safe_float(market_row.get("liquidity", 0), 0.0)
         volume = _safe_float(market_row.get("volume", 0), 0.0)
         last_trade_price = _clip01(_safe_float(market_row.get("last_trade_price", signal_price), signal_price))
@@ -181,19 +185,23 @@ class FeatureBuilder:
         if signals_df is None or signals_df.empty:
             return pd.DataFrame()
 
-        self.update_wallet_history(signals_df)
-
         market_lookup = {}
         if markets_df is not None and not markets_df.empty:
             for _, row in markets_df.iterrows():
                 market_lookup[str(row.get("question", "")).lower()] = row.to_dict()
 
         rows = []
-        for _, signal_row in signals_df.iterrows():
+        work_df = signals_df.copy()
+        if "timestamp" in work_df.columns:
+            work_df["timestamp"] = pd.to_datetime(work_df["timestamp"], utc=True, errors="coerce")
+            work_df = work_df.sort_values("timestamp")
+
+        for _, signal_row in work_df.iterrows():
             signal = signal_row.to_dict()
             title_key = str(signal.get("market_title", "")).lower()
             matched_market = market_lookup.get(title_key)
             rows.append(self.build_feature_row(signal, matched_market))
+            self.update_wallet_history(signal)
 
         features_df = pd.DataFrame(rows)
         logging.info("Built %s grouped feature rows.", len(features_df))

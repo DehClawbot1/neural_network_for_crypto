@@ -60,13 +60,32 @@ class HistoricalDatasetBuilder:
             )
 
         if not markets_df.empty and "market_title" in dataset.columns and "question" in markets_df.columns:
-            latest_markets = markets_df.drop_duplicates(subset=["question"], keep="last")
-            dataset = dataset.merge(
-                latest_markets[[c for c in latest_markets.columns if c in ["question", "liquidity", "volume", "last_trade_price", "url", "best_bid", "best_ask", "slug", "condition_id", "end_date"]]],
-                left_on="market_title",
-                right_on="question",
-                how="left",
-            )
+            if "timestamp" in dataset.columns and "timestamp" in markets_df.columns:
+                dataset["timestamp"] = pd.to_datetime(dataset["timestamp"], utc=True, errors="coerce")
+                markets_df["timestamp"] = pd.to_datetime(markets_df["timestamp"], utc=True, errors="coerce")
+                merged_parts = []
+                for market_title, group in dataset.groupby("market_title"):
+                    market_history = markets_df[markets_df["question"] == market_title]
+                    if market_history.empty:
+                        merged_parts.append(group)
+                        continue
+                    merged_parts.append(
+                        pd.merge_asof(
+                            group.sort_values("timestamp"),
+                            market_history[[c for c in market_history.columns if c in ["timestamp", "question", "liquidity", "volume", "last_trade_price", "url", "best_bid", "best_ask", "slug", "condition_id", "end_date"]]].sort_values("timestamp"),
+                            on="timestamp",
+                            direction="backward",
+                        )
+                    )
+                dataset = pd.concat(merged_parts, ignore_index=True) if merged_parts else dataset
+            else:
+                latest_markets = markets_df.drop_duplicates(subset=["question"], keep="last")
+                dataset = dataset.merge(
+                    latest_markets[[c for c in latest_markets.columns if c in ["question", "liquidity", "volume", "last_trade_price", "url", "best_bid", "best_ask", "slug", "condition_id", "end_date"]]],
+                    left_on="market_title",
+                    right_on="question",
+                    how="left",
+                )
 
         if not alerts_df.empty and "market_title" in dataset.columns and "market" in alerts_df.columns:
             alert_counts = alerts_df.groupby("market").size().reset_index(name="alert_count")
