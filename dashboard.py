@@ -1403,6 +1403,53 @@ def render_model_status(model_status_df, supervised_eval_df, time_split_eval_df,
         st.dataframe(backtest_wallet_df.head(15), width="stretch")
 
 
+def render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df, path_replay_df):
+    st.markdown('<div class="section-title">Data Quality & Pipeline Readiness</div>', unsafe_allow_html=True)
+    required_files = {
+        "signals.csv": SIGNALS_FILE,
+        "execution_log.csv": EXECUTION_FILE,
+        "markets.csv": MARKETS_FILE,
+        "whales.csv": WHALES_FILE,
+        "alerts.csv": ALERTS_FILE,
+        "positions.csv": POSITIONS_FILE,
+        "closed_positions.csv": CLOSED_POSITIONS_FILE,
+        "model_status.csv": MODEL_STATUS_FILE,
+        "path_replay_backtest.csv": PATH_REPLAY_FILE,
+    }
+    frames = {
+        "signals.csv": signals_df,
+        "execution_log.csv": trades_df,
+        "markets.csv": markets_df,
+        "whales.csv": whales_df,
+        "alerts.csv": alerts_df,
+        "positions.csv": positions_df,
+        "closed_positions.csv": closed_positions_df,
+        "model_status.csv": model_status_df,
+        "path_replay_backtest.csv": path_replay_df,
+    }
+    rows = []
+    for name, path in required_files.items():
+        df = frames[name]
+        latest_ts = _latest_timestamp_from_df(df)
+        rows.append({
+            "file": name,
+            "present": "Yes" if Path(path).exists() else "No",
+            "row_count": 0 if df is None or df.empty else len(df),
+            "latest_timestamp": latest_ts.strftime('%Y-%m-%d %H:%M:%S') if latest_ts is not None else "N/A",
+            "schema_validation": "ok" if df is not None and not df.empty else "missing/empty",
+        })
+    quality_df = pd.DataFrame(rows)
+    st.dataframe(quality_df, width="stretch", hide_index=True)
+
+    training_ready = "Yes" if not closed_positions_df.empty and not model_status_df.empty else "No"
+    replay_ready = "Yes" if not path_replay_df.empty else "No"
+    target_available = "Yes" if Path(LOGS_DIR / "contract_targets.csv").exists() else "No"
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Training Readiness", training_ready)
+    c2.metric("Replay Readiness", replay_ready)
+    c3.metric("Target Availability", target_available)
+
+
 def render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df):
     st.caption("Raw data is split into sub-tabs for faster inspection and export-oriented review.")
     raw_tabs = st.tabs(["Signals", "Execution", "Episodes", "Markets", "Whales", "Alerts", "Learning", "Positions"])
@@ -1528,6 +1575,7 @@ def main():
         with sub_model:
             render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df, backtest_wallet_df, model_registry_df)
         with sub_quality:
+            render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df, path_replay_df)
             render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
 
 
