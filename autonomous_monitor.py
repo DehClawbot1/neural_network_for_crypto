@@ -3,6 +3,7 @@ from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
+from incident_manager import IncidentManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -18,6 +19,7 @@ class AutonomousMonitor:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.output_file = self.logs_dir / "system_health.csv"
         self.heartbeat_file = self.logs_dir / "service_heartbeats.csv"
+        self.incident_manager = IncidentManager(self.logs_dir)
 
     def _latest_timestamp(self, df):
         if df is None or df.empty:
@@ -45,6 +47,13 @@ class AutonomousMonitor:
 
     def write_failure(self, service: str, error: str, extra: dict | None = None):
         self.write_heartbeat(service=service, status="error", message=str(error), extra=extra)
+        self.incident_manager.raise_incident(
+            dedupe_key=f"service_failure|{service}|{error}",
+            source_module=service,
+            severity="critical",
+            message=str(error),
+            status="open",
+        )
 
     def write_status(self, signals_df=None, trades_df=None, alerts_df=None, open_positions_df=None):
         record = {

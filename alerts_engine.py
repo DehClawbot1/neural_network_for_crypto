@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
+from incident_manager import IncidentManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -19,6 +20,7 @@ class AlertsEngine:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.alerts_file = self.logs_dir / "alerts.csv"
         self.probability_move_threshold = probability_move_threshold
+        self.incident_manager = IncidentManager(self.logs_dir)
 
     def _normalize_alert(self, record: dict):
         alert_type = str(record.get("alert_type", "UNKNOWN"))
@@ -67,6 +69,13 @@ class AlertsEngine:
                 pass
         df = pd.DataFrame([normalized])
         df.to_csv(self.alerts_file, mode="a", header=not self.alerts_file.exists(), index=False)
+        self.incident_manager.raise_incident(
+            dedupe_key=f"{normalized.get('alert_type')}|{normalized.get('market')}|{normalized.get('message')}",
+            source_module=normalized.get("source_module", "alerts_engine"),
+            severity=str(normalized.get("severity", "info")),
+            message=str(normalized.get("message", normalized.get("alert_type", "alert"))),
+            status=str(normalized.get("status", "open")),
+        )
 
     def detect_probability_moves(self, current_markets_df: pd.DataFrame, previous_markets_df: pd.DataFrame | None):
         alerts = []
