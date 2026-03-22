@@ -1,6 +1,6 @@
 # Neural Network for Crypto
 
-Public-data Polymarket research system for **BTC-related markets**, **smart-wallet tracking**, **paper-trading simulation**, and **historical model training**.
+Public-data Polymarket system for **BTC-related markets**, **smart-wallet tracking**, **paper-trading simulation**, **historical model training**, and an isolated **live-test branch** for future authenticated execution experiments.
 
 ## What this project is
 
@@ -12,20 +12,24 @@ This repo is for:
 - path-replay backtesting
 - paper-trading dashboards
 
-This repo is **not** for:
+On the default paper/research line, this repo is **not** for:
 - connecting your live Polymarket account
 - placing real orders
 - real-money execution
 - storing or requiring your private trading credentials
 
+A separate branch, **`live-test`**, now exists for isolated live-execution scaffolding and testing.
+
 ## Safety / mode
 
-Current intended mode:
+Current intended mode on `main`:
 - **public-data only**
 - **paper-trading only**
 - **research / backtesting only**
 
-You do **not** need a Polymarket API key for the current setup.
+You do **not** need a Polymarket API key for the default paper setup.
+
+On the separate `live-test` branch, authenticated client scaffolding exists for future testing, but that branch should be treated as isolated and experimental.
 
 The project uses public endpoints only:
 - **Gamma API** for market discovery
@@ -179,6 +183,17 @@ Starts separating:
 - entry rule layer
 - exit rule layer
 
+## Live-test branch additions
+
+The `live-test` branch now contains scaffolding such as:
+- `execution_client.py`
+- `order_manager.py`
+- `reconciliation_service.py`
+- `live_risk_manager.py`
+- `db.py`
+
+Those files are intended for isolated authenticated execution experiments and should not be confused with the paper-only main line.
+
 ## UI
 
 ### `dashboard.py`
@@ -243,10 +258,20 @@ http://127.0.0.1:8000/docs
 
 ## Recommended Windows usage
 
-If the repo already exists locally:
+If the repo already exists locally on the paper branch:
 
 ```powershell
 git pull origin main
+python -m pip install -r requirements.txt
+python run_bot.py
+```
+
+If you want the separate live-test branch instead:
+
+```powershell
+git fetch origin
+git checkout live-test
+git pull origin live-test
 python -m pip install -r requirements.txt
 python run_bot.py
 ```
