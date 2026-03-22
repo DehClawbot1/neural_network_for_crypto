@@ -12,7 +12,7 @@ class AlertsEngine:
     Research/paper-trading only.
     """
 
-    def __init__(self, logs_dir="logs", probability_move_threshold=0.08):
+    def __init__(self, logs_dir="logs", probability_move_threshold=0.03):
         self.logs_dir = Path(logs_dir)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.alerts_file = self.logs_dir / "alerts.csv"
@@ -62,7 +62,7 @@ class AlertsEngine:
         for market_title, group in grouped:
             unique_wallets = group["trader_wallet"].nunique() if "trader_wallet" in group.columns else 0
             total_signals = len(group)
-            if unique_wallets >= 3:
+            if unique_wallets >= 2:
                 alerts.append(
                     {
                         "alert_type": "WHALE_CLUSTER",

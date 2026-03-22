@@ -138,7 +138,7 @@ def render_overview(signals_df, trades_df, markets_df, alerts_df):
     with c3:
         st.metric("Tracked BTC Markets", len(markets_df))
     with c4:
-        st.metric("Active Alerts", len(alerts_df))
+        st.metric("Recent Alerts", len(alerts_df))
 
     st.caption(f"Highest confidence: {top_conf} | Last refresh: {datetime.now().strftime('%H:%M:%S')}")
 

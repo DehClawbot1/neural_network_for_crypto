@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 GAMMA_MARKETS_URL = "https://gamma-api.polymarket.com/markets"
 
 
-def fetch_btc_markets(limit=100, closed=False):
+def fetch_btc_markets(limit=500, closed=False):
     """
     Fetch public Polymarket markets and filter for Bitcoin/BTC-related ones.
     This is for research/monitoring only.
