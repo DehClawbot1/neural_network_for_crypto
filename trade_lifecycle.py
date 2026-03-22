@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
+
+import pandas as pd
 
 from pnl_engine import PNLEngine
 
@@ -20,6 +23,7 @@ class TradeLifecycle:
     token_id: str | None
     condition_id: str | None
     outcome_side: str
+    logs_dir: str = "logs"
     state: TradeState = TradeState.NEW_SIGNAL
     size_usdc: float = 0.0
     shares: float = 0.0
@@ -31,8 +35,16 @@ class TradeLifecycle:
     closed_at: str | None = None
     ledger: list = field(default_factory=list)
 
+    def _write_execution_event(self, payload: dict):
+        logs_path = Path(self.logs_dir)
+        logs_path.mkdir(parents=True, exist_ok=True)
+        execution_file = logs_path / "execution_log.csv"
+        pd.DataFrame([payload]).to_csv(execution_file, mode="a", header=not execution_file.exists(), index=False)
+
     def on_signal(self, signal_row: dict):
-        self.ledger.append({"event": "signal", "timestamp": datetime.now().isoformat(), "signal": signal_row})
+        payload = {"event": "signal", "timestamp": datetime.now().isoformat(), "market": self.market, "token_id": self.token_id, "condition_id": self.condition_id, "outcome_side": self.outcome_side}
+        self.ledger.append({**payload, "signal": signal_row})
+        self._write_execution_event(payload)
         self.state = TradeState.NEW_SIGNAL
 
     def enter(self, size_usdc: float, entry_price: float):
@@ -42,7 +54,9 @@ class TradeLifecycle:
         self.shares = PNLEngine.shares_from_capital(size_usdc, entry_price)
         self.opened_at = datetime.now().isoformat()
         self.state = TradeState.ENTERED
-        self.ledger.append({"event": "enter", "timestamp": self.opened_at, "size_usdc": size_usdc, "entry_price": entry_price})
+        payload = {"event": "enter", "timestamp": self.opened_at, "market": self.market, "token_id": self.token_id, "condition_id": self.condition_id, "outcome_side": self.outcome_side, "size_usdc": size_usdc, "entry_price": entry_price}
+        self.ledger.append(payload)
+        self._write_execution_event(payload)
 
     def update_market(self, live_price: float):
         self.current_price = live_price

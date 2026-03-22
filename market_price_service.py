@@ -1,11 +1,15 @@
 from datetime import datetime, timedelta, timezone
 
+import asyncio
+import json
+
 import requests
 
 
 class MarketPriceService:
     CLOB_HISTORY_URL = "https://clob.polymarket.com/prices-history"
     CLOB_PRICE_URL = "https://clob.polymarket.com/price"
+    CLOB_WS_URL = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 
     def __init__(self, max_age_seconds=20):
         self.max_age_seconds = max_age_seconds
@@ -71,3 +75,28 @@ class MarketPriceService:
 
     def get_latest_prices(self, token_ids):
         return self.get_batch_prices(token_ids)
+
+    async def stream_prices(self, token_ids, update_callback=None):
+        try:
+            import websockets
+        except Exception:
+            return
+
+        async with websockets.connect(self.CLOB_WS_URL) as ws:
+            await ws.send(json.dumps({
+                "assets_ids": [str(t) for t in token_ids if t],
+                "type": "market",
+                "custom_feature_enabled": True,
+            }))
+
+            while True:
+                msg = json.loads(await ws.recv())
+                token_id = str(msg.get("asset_id") or msg.get("market") or "")
+                price = msg.get("price") or msg.get("mid") or msg.get("best_ask") or msg.get("best_bid")
+                if token_id and price is not None:
+                    self.cache[token_id] = {"price": float(price), "timestamp": datetime.now(timezone.utc)}
+                    if update_callback is not None:
+                        update_callback(token_id, float(price), msg)
+
+    def stream_prices_forever(self, token_ids, update_callback=None):
+        asyncio.run(self.stream_prices(token_ids, update_callback=update_callback))
