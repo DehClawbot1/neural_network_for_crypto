@@ -33,7 +33,7 @@ def load_csv(path):
     if not path.exists():
         return pd.DataFrame()
     try:
-        return pd.read_csv(path)
+        return pd.read_csv(path, engine="python", on_bad_lines="skip")
     except Exception:
         return pd.DataFrame()
 
