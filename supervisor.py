@@ -80,6 +80,24 @@ def prepare_observation(feature_row, legacy=False):
     return obs
 
 
+def prepare_position_observation(position_row):
+    return np.array(
+        [
+            float(position_row.get("confidence", 0.5)),
+            float(position_row.get("shares", 0.0)),
+            float(position_row.get("current_price", 0.5)),
+            float(position_row.get("entry_price", 0.5)),
+            float(position_row.get("market_value", 0.0)),
+            float(position_row.get("unrealized_pnl", 0.0)),
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+        ],
+        dtype=np.float32,
+    )
+
+
 def safe_read_csv(path):
     if not os.path.exists(path):
         return pd.DataFrame()
@@ -273,9 +291,15 @@ def main_loop():
                 log_ranked_signal(ranked_row.to_dict())
             print("======================================\n")
 
-            # 4. Use RL policy for execution when available; fall back to rules otherwise
+            # 4A. Candidate-entry path for tokens without open positions
+            open_positions_df = position_manager.get_open_positions()
+            open_token_ids = set(open_positions_df.get("token_id", pd.Series(dtype=str)).dropna().astype(str).tolist()) if not open_positions_df.empty else set()
             for _, row in scored_df.iterrows():
                 signal_row = row.to_dict()
+                token_id = str(signal_row.get("token_id", "") or "")
+                if token_id and token_id in open_token_ids:
+                    continue
+
                 action_val = choose_action(signal_row, entry_rule, brain=brain)
                 if action_val not in [0, 1, 2]:
                     action_val = 0
@@ -286,6 +310,22 @@ def main_loop():
                     size = 10 if action_val == 1 else 50
                     fill_price = min(0.99, float(signal_row.get("current_price", 0.5)) + 0.01)
                     position_manager.open_position(signal_row, size_usdc=size, fill_price=fill_price)
+
+            # 4B. Open-position management path for hold / reduce / exit
+            open_positions_df = position_manager.update_mark_to_market(scored_df)
+            if not open_positions_df.empty and brain is not None:
+                for _, pos_row in open_positions_df.iterrows():
+                    obs = prepare_position_observation(pos_row.to_dict())
+                    try:
+                        pos_action, _ = brain.predict(obs, deterministic=True)
+                        pos_action_val = int(pos_action.item() if hasattr(pos_action, "item") else pos_action[0])
+                    except Exception:
+                        pos_action_val = 3
+
+                    if pos_action_val == 4:
+                        position_manager.reduce_position(pos_row.to_dict(), fraction=0.5)
+                    elif pos_action_val == 5:
+                        position_manager.close_position(pos_row.to_dict(), reason="rl_exit")
 
             # 5. Phase 2 analytics outputs
             trades_df = safe_read_csv(SUMMARY_FILE)

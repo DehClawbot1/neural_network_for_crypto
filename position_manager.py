@@ -104,6 +104,45 @@ class PositionManager:
         self._write_positions(positions)
         return positions
 
+    def reduce_position(self, position_row: dict, fraction=0.5):
+        positions = self._read_positions()
+        if positions.empty or "position_id" not in positions.columns:
+            return positions
+        position_id = position_row.get("position_id")
+        mask = positions["position_id"].astype(str) == str(position_id)
+        if not mask.any():
+            return positions
+
+        idx = positions[mask].index[0]
+        shares = float(positions.at[idx, "shares"] or 0.0)
+        size_usdc = float(positions.at[idx, "size_usdc"] or 0.0)
+        positions.at[idx, "shares"] = shares * (1.0 - fraction)
+        positions.at[idx, "size_usdc"] = size_usdc * (1.0 - fraction)
+        positions.at[idx, "position_action"] = "REDUCE"
+        self._write_positions(positions)
+        return positions
+
+    def close_position(self, position_row: dict, reason="policy_exit"):
+        positions = self._read_positions()
+        if positions.empty or "position_id" not in positions.columns:
+            return pd.DataFrame()
+        position_id = position_row.get("position_id")
+        mask = positions["position_id"].astype(str) == str(position_id)
+        if not mask.any():
+            return pd.DataFrame()
+
+        row = positions[mask].iloc[0].to_dict()
+        row["closed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        row["position_action"] = "EXIT"
+        row["close_reason"] = reason
+        row["status"] = "CLOSED"
+
+        remaining = positions[~mask]
+        self._write_positions(remaining)
+        closed_df = pd.DataFrame([row])
+        closed_df.to_csv(self.closed_file, mode="a", header=not self.closed_file.exists(), index=False)
+        return closed_df
+
     def apply_exit_rules(self, alerts_df: pd.DataFrame | None = None):
         positions = self._read_positions()
         if positions.empty:
