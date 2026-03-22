@@ -22,7 +22,7 @@ class ContractTargetBuilder:
         except Exception:
             return pd.DataFrame()
 
-    def build(self, horizon_rows=5):
+    def build(self, horizon_rows=12, tp_move=0.04, sl_move=0.03):
         df = self._safe_read(self.signals_file)
         if df.empty or "market" not in df.columns or "current_price" not in df.columns:
             return pd.DataFrame()
@@ -35,15 +35,42 @@ class ContractTargetBuilder:
         for market, group in df.groupby("market"):
             group = group.reset_index(drop=True)
             group["future_price"] = group["current_price"].shift(-horizon_rows)
-            group["future_return"] = (group["future_price"] - group["current_price"]) / group["current_price"]
-            group["target_up"] = (group["future_return"] > 0).astype(int)
+            group["forward_return_15m"] = (group["future_price"] - group["current_price"]) / group["current_price"]
+            group["target_up"] = (group["forward_return_15m"] > 0).astype(int)
+
+            tp_labels = []
+            mfe_values = []
+            mae_values = []
+            for idx, row in group.iterrows():
+                entry_price = float(row.get("current_price", 0.5))
+                future_window = group.iloc[idx + 1 : idx + 1 + horizon_rows]
+                if future_window.empty:
+                    tp_labels.append(None)
+                    mfe_values.append(None)
+                    mae_values.append(None)
+                    continue
+
+                moves = (future_window["current_price"].astype(float) - entry_price).tolist()
+                mfe = max(moves) if moves else None
+                mae = min(moves) if moves else None
+                tp_hit_idx = next((i for i, move in enumerate(moves) if move >= tp_move), None)
+                sl_hit_idx = next((i for i, move in enumerate(moves) if move <= -sl_move), None)
+                tp_before_sl = int(tp_hit_idx is not None and (sl_hit_idx is None or tp_hit_idx < sl_hit_idx))
+
+                tp_labels.append(tp_before_sl)
+                mfe_values.append(mfe)
+                mae_values.append(mae)
+
+            group["tp_before_sl_60m"] = tp_labels
+            group["mfe_60m"] = mfe_values
+            group["mae_60m"] = mae_values
             grouped_rows.append(group)
 
-        result = pd.concat(grouped_rows, ignore_index=True).dropna(subset=["future_price", "future_return"])
+        result = pd.concat(grouped_rows, ignore_index=True).dropna(subset=["future_price", "forward_return_15m"])
         return result
 
-    def write(self, horizon_rows=5):
-        df = self.build(horizon_rows=horizon_rows)
+    def write(self, horizon_rows=12, tp_move=0.04, sl_move=0.03):
+        df = self.build(horizon_rows=horizon_rows, tp_move=tp_move, sl_move=sl_move)
         if not df.empty:
             df.to_csv(self.output_file, index=False)
         return df

@@ -5,6 +5,7 @@ from target_builder import TargetBuilder
 from dataset_aligner import DatasetAligner
 from supervised_trainer import SupervisedTrainer
 from evaluator import Evaluator
+from supervised_models import SupervisedModels
 from contract_target_builder import ContractTargetBuilder
 from wallet_alpha_builder import WalletAlphaBuilder
 from walk_forward_evaluator import WalkForwardEvaluator
@@ -27,8 +28,9 @@ def run_research_pipeline():
     Evaluator().evaluate()
 
     logging.info("Building contract-level labels and wallet alpha...")
-    ContractTargetBuilder().write(horizon_rows=5)
+    ContractTargetBuilder().write(horizon_rows=12, tp_move=0.04, sl_move=0.03)
     WalletAlphaBuilder().write()
+    SupervisedModels().train()
     WalkForwardEvaluator().evaluate()
     TimeSplitTrainer().run()
     PathReplaySimulator().write()
