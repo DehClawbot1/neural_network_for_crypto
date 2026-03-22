@@ -643,7 +643,7 @@ def main():
     st.sidebar.caption("Tip: rerun/refresh after a supervisor cycle completes.")
     st.sidebar.write(f"Suggested refresh interval: {refresh_seconds}s")
     st.sidebar.caption(f"Signals file: {SIGNALS_FILE}")
-    st.sidebar.caption(f"Trades file: {SUMMARY_FILE}")
+    st.sidebar.caption(f"Execution file: {EXECUTION_FILE}")
     st.sidebar.caption(f"Markets file: {MARKETS_FILE}")
     st.sidebar.caption(f"Whales file: {WHALES_FILE}")
     st.sidebar.caption(f"Alerts file: {ALERTS_FILE}")
