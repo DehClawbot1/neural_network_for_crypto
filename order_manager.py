@@ -5,6 +5,7 @@ import pandas as pd
 
 from execution_client import ExecutionClient
 from live_risk_manager import LiveRiskManager
+from db import Database
 
 
 class OrderManager:
@@ -20,6 +21,7 @@ class OrderManager:
         self.fills_file = self.logs_dir / "live_fills.csv"
         self.client = ExecutionClient()
         self.risk = LiveRiskManager()
+        self.db = Database(self.logs_dir / "trading.db")
 
     def _append(self, path: Path, row: dict):
         pd.DataFrame([row]).to_csv(path, mode="a", header=not path.exists(), index=False)
@@ -51,6 +53,10 @@ class OrderManager:
             "readiness": readiness,
         }
         self._append(self.orders_file, row)
+        self.db.execute(
+            "INSERT OR REPLACE INTO orders (order_id, token_id, condition_id, outcome_side, order_side, price, size, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (row.get("order_id"), row.get("token_id"), row.get("condition_id"), row.get("outcome_side"), row.get("order_side"), row.get("price"), row.get("size"), row.get("status"), row.get("timestamp")),
+        )
         return row, response
 
     def get_order_status(self, order_id):
@@ -94,5 +100,10 @@ class OrderManager:
         return response
 
     def record_fill(self, fill_payload: dict):
-        self._append(self.fills_file, {"timestamp": datetime.utcnow().isoformat(), **fill_payload})
+        row = {"timestamp": datetime.utcnow().isoformat(), **fill_payload}
+        self._append(self.fills_file, row)
+        self.db.execute(
+            "INSERT OR REPLACE INTO fills (fill_id, order_id, token_id, price, size, filled_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (row.get("trade_id") or row.get("fill_id"), row.get("order_id"), row.get("token_id"), row.get("price"), row.get("size"), row.get("timestamp")),
+        )
         return fill_payload
