@@ -7,6 +7,7 @@ from api_setup import validate_environment
 from rl_trainer import train_model
 from supervisor import main_loop, load_brain
 from retrainer import Retrainer
+from real_pipeline import run_research_pipeline
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -55,7 +56,7 @@ def ensure_model():
 
 
 def maybe_retrain_before_start():
-    print("[2.5/3] Checking whether the model should retrain from accumulated data...")
+    print("[2.5/4] Checking whether the model should retrain from accumulated data...")
     retrainer = Retrainer()
     retrained = retrainer.maybe_retrain()
     if retrained:
@@ -64,8 +65,17 @@ def maybe_retrain_before_start():
         print("[+] No pre-start retraining needed yet.\n")
 
 
+def build_research_artifacts():
+    print("[3/4] Building research datasets / supervised artifacts...")
+    try:
+        run_research_pipeline()
+        print("[+] Research pipeline refreshed (historical dataset, targets, eval files).\n")
+    except Exception as exc:
+        print(f"[!] Research pipeline failed but supervisor can still run: {exc}\n")
+
+
 def start_supervisor():
-    print("[3/3] Starting supervisor...")
+    print("[4/4] Starting supervisor...")
     print("[+] Status: RUNNING")
     print("[+] Expected behavior:")
     print("    - fetch public BTC-related market/account activity")
@@ -89,6 +99,7 @@ def main():
 
     # Final quick sanity check before loop
     maybe_retrain_before_start()
+    build_research_artifacts()
 
     if load_brain() is None:
         print("[-] Model exists but could not be loaded. Aborting.")
