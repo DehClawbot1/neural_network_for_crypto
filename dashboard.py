@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from log_loader import load_execution_history as shared_load_execution_history
 
 BASE_DIR = Path(__file__).resolve().parent
 LOGS_DIR = BASE_DIR / "logs"
@@ -43,20 +44,7 @@ def load_csv(path):
 
 
 def load_execution_history():
-    current_df = load_csv(EXECUTION_FILE)
-    legacy_df = load_csv(LOGS_DIR / "daily_summary.txt")
-    if current_df.empty and legacy_df.empty:
-        return pd.DataFrame()
-    if current_df.empty:
-        return legacy_df
-    if legacy_df.empty:
-        return current_df
-
-    combined = pd.concat([legacy_df, current_df], ignore_index=True, sort=False)
-    dedupe_cols = [c for c in ["timestamp", "market", "wallet_copied", "fill_price", "size_usdc", "action_type"] if c in combined.columns]
-    if dedupe_cols:
-        combined = combined.drop_duplicates(subset=dedupe_cols, keep="last")
-    return combined
+    return shared_load_execution_history(LOGS_DIR)
 
 
 def apply_dashboard_filters(df, market_search="", wallet_search="", min_confidence=0.0, signal_label="All", position_status="All"):
