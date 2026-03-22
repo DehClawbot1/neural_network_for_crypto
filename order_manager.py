@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from execution_client import ExecutionClient
+from live_risk_manager import LiveRiskManager
 
 
 class OrderManager:
@@ -18,11 +19,23 @@ class OrderManager:
         self.orders_file = self.logs_dir / "live_orders.csv"
         self.fills_file = self.logs_dir / "live_fills.csv"
         self.client = ExecutionClient()
+        self.risk = LiveRiskManager()
 
     def _append(self, path: Path, row: dict):
         pd.DataFrame([row]).to_csv(path, mode="a", header=not path.exists(), index=False)
 
-    def submit_entry(self, token_id, price, size, side="BUY", condition_id=None, outcome_side=None):
+    def check_readiness(self, asset_type=None):
+        try:
+            return self.client.get_balance_allowance(asset_type=asset_type)
+        except Exception:
+            return None
+
+    def submit_entry(self, token_id, price, size, side="BUY", condition_id=None, outcome_side=None, spread=None, open_orders=0, daily_pnl=0.0):
+        decision = self.risk.pre_trade_check(price=price, size=size, spread=spread, open_orders=open_orders, daily_pnl=daily_pnl)
+        if not decision.allowed:
+            return {"status": "REJECTED", "reason": decision.reason}, None
+
+        readiness = self.check_readiness(asset_type="COLLATERAL")
         response = self.client.create_and_post_order(token_id=token_id, price=price, size=size, side=side)
         order_id = response.get("orderID") or response.get("order_id") or response.get("id")
         row = {
@@ -35,6 +48,7 @@ class OrderManager:
             "price": price,
             "size": size,
             "status": response.get("status", "SUBMITTED"),
+            "readiness": readiness,
         }
         self._append(self.orders_file, row)
         return row, response
