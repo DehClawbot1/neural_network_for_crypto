@@ -12,7 +12,7 @@ This project is for:
 - paper-trading simulation
 - monitoring / dashboarding
 
-On the paper / research line, this repo is **not** for:
+On the paper / research line, this repo is for:
 - connecting your live Polymarket account on `main`
 - storing or requiring real trading credentials for paper mode
 - placing real-money orders from the paper path
