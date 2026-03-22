@@ -906,8 +906,8 @@ def render_best_trades(closed_positions_df, path_replay_df):
 
 
 def render_action_board(signals_df, positions_df):
-    st.markdown('<div class="section-title">Top 10 Action Board</div>', unsafe_allow_html=True)
-    st.caption("Paper-trading action board only — not live execution advice.")
+    st.markdown('<div class="section-title">Recommended Paper Actions</div>', unsafe_allow_html=True)
+    st.caption("Paper-trading decision board only — not live execution advice.")
     if signals_df.empty:
         st.info("No ranked signals available yet.")
         return
@@ -916,7 +916,7 @@ def render_action_board(signals_df, positions_df):
     sort_cols = [c for c in ["edge_score", "p_tp_before_sl", "confidence"] if c in ranked.columns]
     if sort_cols:
         ranked = ranked.sort_values(by=sort_cols, ascending=[False] * len(sort_cols))
-    ranked = ranked.head(10).copy()
+    ranked = ranked.head(20).copy()
 
     open_markets = set()
     positions_lookup = {}
@@ -924,60 +924,48 @@ def render_action_board(signals_df, positions_df):
         open_markets = set(positions_df["market"].dropna().astype(str).tolist())
         positions_lookup = positions_df.drop_duplicates(subset=["market"], keep="last").set_index("market").to_dict("index")
 
-    rows = []
+    grouped_rows = {"Enter": [], "Hold": [], "Exit / Leave": [], "Watch": []}
+
     for _, row in ranked.iterrows():
         market = row.get("market_title", row.get("market", "Unknown Market"))
-        confidence = float(row.get("confidence", 0.0) or 0.0)
-        p_tp = float(row.get("p_tp_before_sl", 0.0) or 0.0)
-        expected_return = float(row.get("expected_return", 0.0) or 0.0)
-        edge = float(row.get("edge_score", 0.0) or 0.0)
-        entry_price_now = float(row.get("current_price", row.get("entry_price", 0.0)) or 0.0)
-        live_market_price = float(row.get("market_last_trade_price", row.get("current_price", 0.0)) or 0.0)
-        price_delta = live_market_price - entry_price_now
+        confidence = pd.to_numeric(pd.Series([row.get("confidence")]), errors="coerce").iloc[0]
+        p_tp = pd.to_numeric(pd.Series([row.get("p_tp_before_sl")]), errors="coerce").iloc[0]
+        edge = pd.to_numeric(pd.Series([row.get("edge_score")]), errors="coerce").iloc[0]
+        current_price = row.get("market_last_trade_price", row.get("current_price"))
         position_row = positions_lookup.get(market, {})
-        open_pnl = float(position_row.get("unrealized_pnl", 0.0) or 0.0) if position_row else 0.0
-        shares = float(position_row.get("shares", 0.0) or 0.0) if position_row else 0.0
-        cost_basis = shares * entry_price_now if shares else 0.0
-        market_value = shares * live_market_price if shares else 0.0
+        open_pnl = position_row.get("unrealized_pnl") if position_row else None
         already_open = market in open_markets
 
-        if already_open and confidence < 0.50:
-            action = "LEAVE / EXIT PAPER POSITION"
-            alert = "🔴 Exit watch"
+        if already_open and pd.notna(confidence) and confidence < 0.50:
+            group = "Exit / Leave"
         elif already_open:
-            action = "HOLD PAPER POSITION"
-            alert = "🟡 Hold / monitor"
-        elif p_tp >= 0.62 and edge > 0:
-            action = "ENTER PAPER POSITION"
-            alert = "🟢 Entry alert"
+            group = "Hold"
+        elif pd.notna(p_tp) and pd.notna(edge) and p_tp >= 0.62 and edge > 0:
+            group = "Enter"
         else:
-            action = "WATCH ONLY"
-            alert = "⚪ No entry yet"
+            group = "Watch"
 
-        rows.append(
+        grouped_rows[group].append(
             {
                 "market": market,
-                "side": row.get("side"),
-                "signal": row.get("signal_label"),
-                "entry_price_now": optional_number(entry_price_raw, 4),
-                "live_market_price": optional_number(live_market_price_raw, 4),
-                "price_delta": optional_number(price_delta, 4),
-                "shares": optional_number(shares, 4),
-                "cost_basis_usdc": optional_number(cost_basis, 4),
-                "market_value_usdc": optional_number(market_value, 4),
-                "paper_profit_usdc": optional_number(open_pnl, 4),
-                "p_tp_before_sl": optional_number(p_tp_raw, 3),
-                "expected_return": optional_number(expected_return_raw, 4),
-                "edge_score": optional_number(edge_raw, 4),
-                "confidence": optional_number(confidence_raw, 3),
-                "action": action,
-                "alert": alert,
-                "link": row.get("market_url"),
+                "side": row.get("outcome_side", row.get("side", "N/A")),
+                "confidence": optional_number(row.get("confidence"), 3),
+                "edge score": optional_number(row.get("edge_score"), 4),
+                "expected return": optional_number(row.get("expected_return"), 4),
+                "current price": optional_number(current_price, 4),
+                "open PnL if held": optional_number(open_pnl, 4),
+                "reason": row.get("reason_summary", row.get("reason", row.get("signal_label", "N/A"))),
+                "link": row.get("market_url", row.get("url", "")),
             }
         )
 
-    board_df = pd.DataFrame(rows)
-    st.dataframe(board_df, width="stretch")
+    for group_name in ["Enter", "Hold", "Exit / Leave", "Watch"]:
+        st.markdown(f"**{group_name}**")
+        group_df = pd.DataFrame(grouped_rows[group_name])
+        if group_df.empty:
+            st.caption("No rows in this group.")
+        else:
+            st.dataframe(group_df, width="stretch", hide_index=True)
 
 
 def render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df, backtest_wallet_df, model_registry_df):
