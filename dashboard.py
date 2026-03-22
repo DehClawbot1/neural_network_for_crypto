@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+import streamlit.components.v1 as components
 from log_loader import load_execution_history as shared_load_execution_history
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -1509,9 +1510,12 @@ def main():
     inject_styles()
     render_header()
 
-    refresh_seconds = st.sidebar.slider("Auto-refresh hint (seconds)", min_value=5, max_value=120, value=15)
-    st.sidebar.caption("Tip: rerun/refresh after a supervisor cycle completes.")
-    st.sidebar.write(f"Suggested refresh interval: {refresh_seconds}s")
+    st.sidebar.markdown("**Dashboard controls**")
+    auto_refresh_enabled = st.sidebar.checkbox("Auto-refresh", value=False)
+    refresh_seconds = st.sidebar.selectbox("Refresh interval (seconds)", [5, 10, 15, 30, 60, 120], index=2)
+    show_debug_sections = st.sidebar.checkbox("Show debug sections", value=True)
+    theme_mode = st.sidebar.selectbox("Theme", ["Dark", "Light", "Auto"], index=0)
+
     market_search = st.sidebar.text_input("Market search", "")
     wallet_search = st.sidebar.text_input("Wallet search", "")
     side_filter = st.sidebar.selectbox("Side filter", ["All", "YES", "NO", "unknown"])
@@ -1521,11 +1525,11 @@ def main():
     only_open_positions = st.sidebar.checkbox("Only open positions", value=False)
     only_actionable = st.sidebar.checkbox("Only actionable signals", value=False)
     time_range_hours = st.sidebar.selectbox("Time range", [1, 6, 12, 24, 72, 168], index=3)
-    st.sidebar.caption(f"Signals file: {SIGNALS_FILE}")
-    st.sidebar.caption(f"Execution file: {EXECUTION_FILE}")
-    st.sidebar.caption(f"Markets file: {MARKETS_FILE}")
-    st.sidebar.caption(f"Whales file: {WHALES_FILE}")
-    st.sidebar.caption(f"Alerts file: {ALERTS_FILE}")
+    if auto_refresh_enabled:
+        components.html(
+            f"<script>setTimeout(function() {{ window.parent.location.reload(); }}, {int(refresh_seconds) * 1000});</script>",
+            height=0,
+        )
 
     signals_df = load_csv(SIGNALS_FILE)
     trades_df = load_execution_history()
@@ -1606,8 +1610,9 @@ def main():
             render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df, backtest_wallet_df, model_registry_df)
         with sub_quality:
             render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df, path_replay_df)
-            with st.expander("Debug / Raw Logs"):
-                render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
+            if show_debug_sections:
+                with st.expander("Debug / Raw Logs"):
+                    render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
 
 
 if __name__ == "__main__":
