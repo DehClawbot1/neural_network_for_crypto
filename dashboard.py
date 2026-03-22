@@ -21,6 +21,9 @@ DATASET_FILE = LOGS_DIR / "historical_dataset.csv"
 POSITIONS_FILE = LOGS_DIR / "positions.csv"
 CLOSED_POSITIONS_FILE = LOGS_DIR / "closed_positions.csv"
 MARKET_DISTRIBUTION_FILE = LOGS_DIR / "market_distribution.csv"
+SUPERVISED_EVAL_FILE = LOGS_DIR / "supervised_eval.csv"
+TIME_SPLIT_EVAL_FILE = LOGS_DIR / "time_split_eval.csv"
+PATH_REPLAY_FILE = LOGS_DIR / "path_replay_backtest.csv"
 
 st.set_page_config(page_title="Neural Network for Crypto", page_icon="📈", layout="wide")
 
@@ -380,30 +383,70 @@ def render_trade_chart(trades_df):
     st.plotly_chart(fig, width="stretch")
 
 
-def render_model_status(model_status_df):
+def render_best_trades(closed_positions_df, path_replay_df):
+    st.markdown('<div class="section-title">Most Successful Trades</div>', unsafe_allow_html=True)
+    source_df = closed_positions_df if not closed_positions_df.empty else path_replay_df
+    if source_df.empty:
+        st.info("No successful trade history yet.")
+        return
+
+    pnl_col = "unrealized_pnl" if "unrealized_pnl" in source_df.columns else "net_pnl" if "net_pnl" in source_df.columns else None
+    if pnl_col is None:
+        st.dataframe(source_df.head(10), width="stretch")
+        return
+
+    best_df = source_df.sort_values(by=pnl_col, ascending=False).head(10)
+    cols = [c for c in ["market", "entry_price", "current_price", "exit_price", pnl_col, "close_reason", "exit_reason", "wallet_copied"] if c in best_df.columns]
+    st.dataframe(best_df[cols], width="stretch")
+
+
+def render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df):
     st.markdown('<div class="section-title">Model / Learning Status</div>', unsafe_allow_html=True)
     weights_status = "🟢 current" if WEIGHTS_FILE.exists() else "🔴 missing"
     st.write(f"**Weights file:** {weights_status}")
 
-    if model_status_df.empty:
-        st.info("No retraining status yet.")
-        return
+    top1, top2, top3, top4 = st.columns(4)
+    with top1:
+        st.metric("Replay Trades", len(path_replay_df))
+    with top2:
+        acc = "-"
+        if not supervised_eval_df.empty and "accuracy" in supervised_eval_df.columns:
+            acc = f"{float(supervised_eval_df.iloc[-1]['accuracy']):.3f}"
+        st.metric("Supervised Accuracy", acc)
+    with top3:
+        test_acc = "-"
+        if not time_split_eval_df.empty and "test_accuracy" in time_split_eval_df.columns:
+            test_acc = f"{float(time_split_eval_df.iloc[-1]['test_accuracy']):.3f}"
+        st.metric("Time-Split Test Acc", test_acc)
+    with top4:
+        sharpe = "-"
+        if not supervised_eval_df.empty and "sharpe" in supervised_eval_df.columns:
+            sharpe = f"{float(supervised_eval_df.iloc[-1]['sharpe']):.3f}"
+        st.metric("Sharpe-like", sharpe)
 
-    latest = model_status_df.iloc[-1].to_dict()
-    dataset_rows = int(latest.get('dataset_rows', 0) or 0)
-    retrain_threshold = int(latest.get('retrain_threshold', 0) or 0)
-    progress_ratio = float(latest.get('progress_ratio', 0) or 0)
-    last_action = latest.get('last_action', 'Unknown')
+    if not model_status_df.empty:
+        latest = model_status_df.iloc[-1].to_dict()
+        dataset_rows = int(latest.get('dataset_rows', 0) or 0)
+        retrain_threshold = int(latest.get('retrain_threshold', 0) or 0)
+        progress_ratio = float(latest.get('progress_ratio', 0) or 0)
+        last_action = latest.get('last_action', 'Unknown')
 
-    c1, c2 = st.columns(2)
-    with c1:
-        st.metric("Dataset Rows", dataset_rows)
-        st.metric("Retrain Threshold", retrain_threshold)
-    with c2:
-        st.metric("Progress Ratio", f"{progress_ratio:.2f}")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Dataset Rows", dataset_rows)
+            st.metric("Retrain Threshold", retrain_threshold)
+        with c2:
+            st.metric("Progress Ratio", f"{progress_ratio:.2f}")
 
-    st.progress(max(0.0, min(1.0, progress_ratio)))
-    st.code(last_action, language="text")
+        st.progress(max(0.0, min(1.0, progress_ratio)))
+        st.code(last_action, language="text")
+
+    if not path_replay_df.empty:
+        pnl_col = "net_pnl" if "net_pnl" in path_replay_df.columns else "gross_pnl" if "gross_pnl" in path_replay_df.columns else None
+        if pnl_col:
+            fig = px.histogram(path_replay_df, x=pnl_col, title="Replay PnL Distribution")
+            fig.update_layout(height=320)
+            st.plotly_chart(fig, width="stretch")
 
 
 def render_raw_data(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df):
@@ -451,6 +494,9 @@ def main():
     model_status_df = load_csv(MODEL_STATUS_FILE)
     positions_df = load_csv(POSITIONS_FILE)
     closed_positions_df = load_csv(CLOSED_POSITIONS_FILE)
+    supervised_eval_df = load_csv(SUPERVISED_EVAL_FILE)
+    time_split_eval_df = load_csv(TIME_SPLIT_EVAL_FILE)
+    path_replay_df = load_csv(PATH_REPLAY_FILE)
 
     render_overview(signals_df, trades_df, markets_df, alerts_df)
 
@@ -466,6 +512,7 @@ def main():
             render_factor_matrix(signals_df)
 
         render_positions(positions_df, closed_positions_df)
+        render_best_trades(closed_positions_df, path_replay_df)
         bottom_left, bottom_right = st.columns([1, 1])
         with bottom_left:
             render_paper_trades(trades_df)
@@ -485,7 +532,7 @@ def main():
             render_market_distribution(distribution_df)
 
     with tab3:
-        render_model_status(model_status_df)
+        render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df)
 
     with tab4:
         render_raw_data(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
