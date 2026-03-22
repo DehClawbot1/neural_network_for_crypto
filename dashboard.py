@@ -18,6 +18,7 @@ MARKETS_FILE = LOGS_DIR / "markets.csv"
 WHALES_FILE = LOGS_DIR / "whales.csv"
 ALERTS_FILE = LOGS_DIR / "alerts.csv"
 MODEL_STATUS_FILE = LOGS_DIR / "model_status.csv"
+SYSTEM_HEALTH_FILE = LOGS_DIR / "system_health.csv"
 WEIGHTS_FILE = BASE_DIR / "weights" / "ppo_polytrader.zip"
 TRADER_ANALYTICS_FILE = LOGS_DIR / "trader_analytics.csv"
 BACKTEST_FILE = LOGS_DIR / "backtest_summary.csv"
@@ -259,7 +260,7 @@ def render_data_freshness_panel(source_frames):
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
-def render_pipeline_health_strip(signals_df, markets_df, positions_df, model_status_df, path_replay_df):
+def render_pipeline_health_strip(signals_df, markets_df, positions_df, model_status_df, path_replay_df, system_health_df=None):
     st.markdown('<div class="section-title">Pipeline Health</div>', unsafe_allow_html=True)
 
     def yes_no(df, max_age_seconds=600):
@@ -275,6 +276,7 @@ def render_pipeline_health_strip(signals_df, markets_df, positions_df, model_sta
         ("Signal engine", yes_no(signals_df)),
         ("Order simulation", yes_no(positions_df)),
         ("Model status", yes_no(model_status_df, max_age_seconds=1800)),
+        ("System health", yes_no(system_health_df, max_age_seconds=600) if system_health_df is not None else "No"),
         ("Replay/backtest available", "Yes" if path_replay_df is not None and not path_replay_df.empty else "No"),
         ("Signals growing", "Yes" if signals_df is not None and len(signals_df) > 0 else "No"),
         ("Markets updated", "Yes" if yes_no(markets_df) == "Yes" else "No"),
@@ -1404,7 +1406,7 @@ def render_model_status(model_status_df, supervised_eval_df, time_split_eval_df,
         st.dataframe(backtest_wallet_df.head(15), width="stretch")
 
 
-def render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df, path_replay_df):
+def render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df, path_replay_df, system_health_df=None):
     st.markdown('<div class="section-title">Data Quality & Pipeline Readiness</div>', unsafe_allow_html=True)
     required_files = {
         "signals.csv": SIGNALS_FILE,
@@ -1415,6 +1417,7 @@ def render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, aler
         "positions.csv": POSITIONS_FILE,
         "closed_positions.csv": CLOSED_POSITIONS_FILE,
         "model_status.csv": MODEL_STATUS_FILE,
+        "system_health.csv": SYSTEM_HEALTH_FILE,
         "path_replay_backtest.csv": PATH_REPLAY_FILE,
     }
     frames = {
@@ -1426,6 +1429,7 @@ def render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, aler
         "positions.csv": positions_df,
         "closed_positions.csv": closed_positions_df,
         "model_status.csv": model_status_df,
+        "system_health.csv": system_health_df if system_health_df is not None else pd.DataFrame(),
         "path_replay_backtest.csv": path_replay_df,
     }
     rows = []
@@ -1479,6 +1483,23 @@ def render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, aler
         st.warning("Missing core columns: " + ", ".join(missing_schema))
     else:
         st.success("Core schema columns are present.")
+
+    st.markdown("**Duplicate & Anomaly Checks**")
+    anomaly_rows = []
+    for name, df in frames.items():
+        if df is None or df.empty:
+            anomaly_rows.append({"dataset": name, "duplicates": "N/A", "timestamp_regression": "N/A", "status": "missing/empty"})
+            continue
+        dup_count = int(df.duplicated().sum())
+        ts = _latest_timestamp_from_df(df)
+        timestamp_regression = "No"
+        if "timestamp" in df.columns:
+            parsed = pd.to_datetime(df["timestamp"], errors="coerce")
+            if parsed.notna().sum() > 1 and parsed.diff().dropna().lt(pd.Timedelta(0)).any():
+                timestamp_regression = "Yes"
+        status = "warning" if dup_count > 0 or timestamp_regression == "Yes" else "ok"
+        anomaly_rows.append({"dataset": name, "duplicates": dup_count, "timestamp_regression": timestamp_regression, "status": status})
+    st.dataframe(pd.DataFrame(anomaly_rows), width="stretch", hide_index=True)
 
 
 def render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df):
@@ -1541,6 +1562,7 @@ def main():
     distribution_df = load_csv(MARKET_DISTRIBUTION_FILE)
     alerts_df = load_csv(ALERTS_FILE)
     model_status_df = load_csv(MODEL_STATUS_FILE)
+    system_health_df = load_csv(SYSTEM_HEALTH_FILE)
     positions_df = load_csv(POSITIONS_FILE)
     closed_positions_df = load_csv(CLOSED_POSITIONS_FILE)
     supervised_eval_df = load_csv(SUPERVISED_EVAL_FILE)
@@ -1556,8 +1578,8 @@ def main():
 
     st.sidebar.markdown("**System quick status**")
     latest_signal_ts = _latest_timestamp_from_df(signals_df)
-    missing_files_count = sum(1 for p in [SIGNALS_FILE, EXECUTION_FILE, MARKETS_FILE, WHALES_FILE, ALERTS_FILE, POSITIONS_FILE, MODEL_STATUS_FILE] if not Path(p).exists())
-    st.sidebar.write(f"Freshness summary: {get_data_freshness(SIGNALS_FILE, EXECUTION_FILE, MARKETS_FILE, WHALES_FILE, ALERTS_FILE, POSITIONS_FILE, MODEL_STATUS_FILE)}")
+    missing_files_count = sum(1 for p in [SIGNALS_FILE, EXECUTION_FILE, MARKETS_FILE, WHALES_FILE, ALERTS_FILE, POSITIONS_FILE, MODEL_STATUS_FILE, SYSTEM_HEALTH_FILE] if not Path(p).exists())
+    st.sidebar.write(f"Freshness summary: {get_data_freshness(SIGNALS_FILE, EXECUTION_FILE, MARKETS_FILE, WHALES_FILE, ALERTS_FILE, POSITIONS_FILE, MODEL_STATUS_FILE, SYSTEM_HEALTH_FILE)}")
     st.sidebar.write(f"Files missing count: {missing_files_count}")
     st.sidebar.write(f"Alerts count: {len(alerts_df)}")
     st.sidebar.write(f"Last signal timestamp: {latest_signal_ts.strftime('%Y-%m-%d %H:%M:%S') if latest_signal_ts is not None else 'N/A'}")
@@ -1573,6 +1595,7 @@ def main():
         st.caption(f"Markets file: {MARKETS_FILE}")
         st.caption(f"Whales file: {WHALES_FILE}")
         st.caption(f"Alerts file: {ALERTS_FILE}")
+        st.caption(f"System health file: {SYSTEM_HEALTH_FILE}")
 
     st.caption("Quick guide: System Status = health and performance, Signals = ranked opportunities, Positions = paper trade state and PnL, Markets = market, whale, and alert context, Models = learning outputs and raw data.")
 
@@ -1588,8 +1611,9 @@ def main():
             ("alerts.csv", ALERTS_FILE, alerts_df),
             ("positions.csv", POSITIONS_FILE, positions_df),
             ("model_status.csv", MODEL_STATUS_FILE, model_status_df),
+            ("system_health.csv", SYSTEM_HEALTH_FILE, system_health_df),
         ])
-        render_pipeline_health_strip(signals_df, markets_df, positions_df, model_status_df, path_replay_df)
+        render_pipeline_health_strip(signals_df, markets_df, positions_df, model_status_df, path_replay_df, system_health_df=system_health_df)
         render_attention_needed(signals_df, trades_df, alerts_df, positions_df, model_status_df, path_replay_df)
         render_performance_charts(trades_df, closed_positions_df, alerts_df, backtest_wallet_df, model_registry_df, positions_df=positions_df)
 
@@ -1631,7 +1655,7 @@ def main():
         with sub_model:
             render_model_status(model_status_df, supervised_eval_df, time_split_eval_df, path_replay_df, backtest_wallet_df, model_registry_df)
         with sub_quality:
-            render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df, path_replay_df)
+            render_data_quality_panel(signals_df, trades_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df, path_replay_df, system_health_df=system_health_df)
             if show_debug_sections:
                 with st.expander("Debug / Raw Logs"):
                     render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
