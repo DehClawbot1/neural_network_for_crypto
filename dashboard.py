@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent
 LOGS_DIR = BASE_DIR / "logs"
 SIGNALS_FILE = LOGS_DIR / "signals.csv"
 EXECUTION_FILE = LOGS_DIR / "execution_log.csv"
-LEGACY_SUMMARY_FILE = LOGS_DIR / "execution_log.csv"
+LEGACY_EXECUTION_FILE = LOGS_DIR / "daily_summary.txt"
 EPISODE_LOG_FILE = LOGS_DIR / "episode_log.csv"
 MARKETS_FILE = LOGS_DIR / "markets.csv"
 WHALES_FILE = LOGS_DIR / "whales.csv"
@@ -192,6 +192,50 @@ def get_data_freshness(*paths):
     if not timestamps:
         return "unknown"
     return max(timestamps).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _latest_timestamp_from_df(df):
+    if df is None or df.empty:
+        return None
+    for col in ["timestamp", "created_at", "updated_at", "logged_at", "closed_at", "opened_at"]:
+        if col in df.columns:
+            ts = pd.to_datetime(df[col], errors="coerce", utc=True).dropna()
+            if not ts.empty:
+                return ts.max()
+    return None
+
+
+def _freshness_status(age_seconds):
+    if age_seconds is None:
+        return "missing", "⚪"
+    if age_seconds < 120:
+        return "fresh", "🟢"
+    if age_seconds <= 600:
+        return "delayed", "🟡"
+    return "stale", "🔴"
+
+
+def render_data_freshness_panel(source_frames):
+    st.markdown('<div class="section-title">Data Freshness</div>', unsafe_allow_html=True)
+    now = pd.Timestamp.utcnow()
+    rows = []
+    for label, path, df in source_frames:
+        path = Path(path)
+        file_modified = pd.Timestamp(path.stat().st_mtime, unit="s", tz="UTC") if path.exists() else None
+        latest_row_ts = _latest_timestamp_from_df(df)
+        latest_ts = max([ts for ts in [file_modified, latest_row_ts] if ts is not None], default=None)
+        age_seconds = int((now - latest_ts).total_seconds()) if latest_ts is not None else None
+        status, badge = _freshness_status(age_seconds)
+        rows.append(
+            {
+                "source": label,
+                "latest_row_timestamp": latest_row_ts.strftime('%Y-%m-%d %H:%M:%S') if latest_row_ts is not None else "N/A",
+                "file_modified_timestamp": file_modified.strftime('%Y-%m-%d %H:%M:%S') if file_modified is not None else "N/A",
+                "age": f"{age_seconds}s" if age_seconds is not None and age_seconds < 120 else (f"{round(age_seconds / 60, 1)}m" if age_seconds is not None else "N/A"),
+                "status": f"{badge} {status}",
+            }
+        )
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
 def render_header():
@@ -895,6 +939,15 @@ def main():
 
     with tab1:
         render_overview(signals_df, trades_df, markets_df, alerts_df, positions_df, closed_positions_df)
+        render_data_freshness_panel([
+            ("signals.csv", SIGNALS_FILE, signals_df),
+            ("execution_log.csv", EXECUTION_FILE, trades_df),
+            ("markets.csv", MARKETS_FILE, markets_df),
+            ("whales.csv", WHALES_FILE, whales_df),
+            ("alerts.csv", ALERTS_FILE, alerts_df),
+            ("positions.csv", POSITIONS_FILE, positions_df),
+            ("model_status.csv", MODEL_STATUS_FILE, model_status_df),
+        ])
         render_performance_charts(trades_df, closed_positions_df, alerts_df, backtest_wallet_df, model_registry_df, positions_df=positions_df)
 
     with tab2:
