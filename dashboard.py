@@ -516,6 +516,56 @@ def render_trade_chart(trades_df):
     st.plotly_chart(fig, width="stretch")
 
 
+def render_performance_charts(trades_df, closed_positions_df, alerts_df, backtest_wallet_df, model_registry_df, positions_df=None):
+    st.markdown('<div class="section-title">Performance Charts</div>', unsafe_allow_html=True)
+    chart_cols = st.columns(2)
+
+    pnl_source = closed_positions_df.copy()
+    if not pnl_source.empty:
+        pnl_col = "net_realized_pnl" if "net_realized_pnl" in pnl_source.columns else "realized_pnl" if "realized_pnl" in pnl_source.columns else None
+        time_col = "closed_at" if "closed_at" in pnl_source.columns else "timestamp" if "timestamp" in pnl_source.columns else None
+        if pnl_col and time_col:
+            pnl_source[time_col] = pd.to_datetime(pnl_source[time_col], errors="coerce")
+            pnl_source = pnl_source.dropna(subset=[time_col]).sort_values(time_col)
+            pnl_source["cumulative_pnl"] = pd.to_numeric(pnl_source[pnl_col], errors="coerce").fillna(0).cumsum()
+            pnl_source["day"] = pnl_source[time_col].dt.date.astype(str)
+            daily = pnl_source.groupby("day")[pnl_col].agg(win_rate=lambda s: float((s > 0).mean() * 100), pnl="sum").reset_index()
+            with chart_cols[0]:
+                st.plotly_chart(px.line(pnl_source, x=time_col, y="cumulative_pnl", title="Cumulative Paper PnL"), width="stretch")
+            with chart_cols[1]:
+                st.plotly_chart(px.bar(daily, x="day", y="pnl", title="Win/Loss by Day"), width="stretch")
+
+    if not trades_df.empty and "confidence" in trades_df.columns:
+        outcome_col = "net_realized_pnl" if "net_realized_pnl" in trades_df.columns else "realized_pnl" if "realized_pnl" in trades_df.columns else None
+        if outcome_col:
+            plot_df = trades_df.copy()
+            plot_df[outcome_col] = pd.to_numeric(plot_df[outcome_col], errors="coerce")
+            st.plotly_chart(px.scatter(plot_df, x="confidence", y=outcome_col, title="Signal Confidence vs Realized Outcome"), width="stretch")
+
+    if not alerts_df.empty:
+        alert_col = "close_reason" if "close_reason" in alerts_df.columns else "alert_type" if "alert_type" in alerts_df.columns else None
+        if alert_col:
+            counts = alerts_df[alert_col].astype(str).value_counts().reset_index()
+            counts.columns = [alert_col, "count"]
+            st.plotly_chart(px.bar(counts, x=alert_col, y="count", title="Alert Counts by Type"), width="stretch")
+
+    if not backtest_wallet_df.empty and "total_pnl" in backtest_wallet_df.columns:
+        st.plotly_chart(px.bar(backtest_wallet_df.head(10), x="wallet_copied", y="total_pnl", title="Top Wallets by Profitability"), width="stretch")
+
+    if positions_df is not None and not positions_df.empty and "market" in positions_df.columns:
+        active = positions_df["market"].astype(str).value_counts().reset_index()
+        active.columns = ["market", "count"]
+        st.plotly_chart(px.bar(active, x="market", y="count", title="Active Positions by Market"), width="stretch")
+
+    if not model_registry_df.empty:
+        reg = model_registry_df.copy()
+        if "promoted_at" in reg.columns:
+            reg["promoted_at"] = pd.to_datetime(reg["promoted_at"], errors="coerce")
+        metric_col = "average_pnl" if "average_pnl" in reg.columns else None
+        if metric_col and "promoted_at" in reg.columns:
+            st.plotly_chart(px.line(reg, x="promoted_at", y=metric_col, title="Model Performance Over Retrains"), width="stretch")
+
+
 def render_best_trades(closed_positions_df, path_replay_df):
     st.markdown('<div class="section-title">Most Successful Trades</div>', unsafe_allow_html=True)
     source_df = closed_positions_df if not closed_positions_df.empty else path_replay_df
@@ -778,6 +828,7 @@ def main():
         render_simulated_decisions(positions_df, closed_positions_df)
         render_positions(positions_df, closed_positions_df)
         render_best_trades(closed_positions_df, path_replay_df)
+        render_performance_charts(trades_df, closed_positions_df, alerts_df, backtest_wallet_df, model_registry_df, positions_df=positions_df)
         if not episode_log_df.empty:
             st.markdown('<div class="section-title">Episode Log</div>', unsafe_allow_html=True)
             st.dataframe(episode_log_df.tail(20), width="stretch")
