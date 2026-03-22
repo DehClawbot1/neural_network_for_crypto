@@ -42,6 +42,23 @@ def load_csv(path):
         return pd.DataFrame()
 
 
+def load_execution_history():
+    current_df = load_csv(EXECUTION_FILE)
+    legacy_df = load_csv(LOGS_DIR / "daily_summary.txt")
+    if current_df.empty and legacy_df.empty:
+        return pd.DataFrame()
+    if current_df.empty:
+        return legacy_df
+    if legacy_df.empty:
+        return current_df
+
+    combined = pd.concat([legacy_df, current_df], ignore_index=True, sort=False)
+    dedupe_cols = [c for c in ["timestamp", "market", "wallet_copied", "fill_price", "size_usdc", "action_type"] if c in combined.columns]
+    if dedupe_cols:
+        combined = combined.drop_duplicates(subset=dedupe_cols, keep="last")
+    return combined
+
+
 def inject_styles():
     st.markdown(
         """
@@ -649,7 +666,7 @@ def main():
     st.sidebar.caption(f"Alerts file: {ALERTS_FILE}")
 
     signals_df = load_csv(SIGNALS_FILE)
-    trades_df = load_csv(EXECUTION_FILE)
+    trades_df = load_execution_history()
     episode_log_df = load_csv(EPISODE_LOG_FILE)
     markets_df = load_csv(MARKETS_FILE)
     whales_df = load_csv(WHALES_FILE)
