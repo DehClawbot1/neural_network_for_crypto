@@ -1554,6 +1554,26 @@ def main():
     positions_df = apply_dashboard_filters(positions_df, market_search=market_search, wallet_search=wallet_search, min_confidence=min_confidence, signal_label=signal_label_filter, position_status="OPEN" if only_open_positions else "All", side_filter=side_filter, min_edge_score=min_edge_score, only_open_positions=only_open_positions, only_actionable=only_actionable, time_range_hours=time_range_hours)
     closed_positions_df = apply_dashboard_filters(closed_positions_df, market_search=market_search, wallet_search=wallet_search, min_confidence=min_confidence, signal_label=signal_label_filter, side_filter=side_filter, min_edge_score=min_edge_score, only_actionable=only_actionable, time_range_hours=time_range_hours)
 
+    st.sidebar.markdown("**System quick status**")
+    latest_signal_ts = _latest_timestamp_from_df(signals_df)
+    missing_files_count = sum(1 for p in [SIGNALS_FILE, EXECUTION_FILE, MARKETS_FILE, WHALES_FILE, ALERTS_FILE, POSITIONS_FILE, MODEL_STATUS_FILE] if not Path(p).exists())
+    st.sidebar.write(f"Freshness summary: {get_data_freshness(SIGNALS_FILE, EXECUTION_FILE, MARKETS_FILE, WHALES_FILE, ALERTS_FILE, POSITIONS_FILE, MODEL_STATUS_FILE)}")
+    st.sidebar.write(f"Files missing count: {missing_files_count}")
+    st.sidebar.write(f"Alerts count: {len(alerts_df)}")
+    st.sidebar.write(f"Last signal timestamp: {latest_signal_ts.strftime('%Y-%m-%d %H:%M:%S') if latest_signal_ts is not None else 'N/A'}")
+
+    st.sidebar.markdown("**Export**")
+    st.sidebar.download_button("Export filtered signals", data=signals_df.to_csv(index=False).encode("utf-8"), file_name="filtered_signals.csv", mime="text/csv")
+    st.sidebar.download_button("Export positions", data=positions_df.to_csv(index=False).encode("utf-8"), file_name="positions.csv", mime="text/csv")
+    st.sidebar.download_button("Export alerts", data=alerts_df.to_csv(index=False).encode("utf-8"), file_name="alerts.csv", mime="text/csv")
+
+    with st.sidebar.expander("Debug file paths"):
+        st.caption(f"Signals file: {SIGNALS_FILE}")
+        st.caption(f"Execution file: {EXECUTION_FILE}")
+        st.caption(f"Markets file: {MARKETS_FILE}")
+        st.caption(f"Whales file: {WHALES_FILE}")
+        st.caption(f"Alerts file: {ALERTS_FILE}")
+
     st.caption("Quick guide: System Status = health and performance, Signals = ranked opportunities, Positions = paper trade state and PnL, Markets = market, whale, and alert context, Models = learning outputs and raw data.")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["System Status", "Signals & Opportunities", "Positions & PnL", "Markets, Whales & Alerts", "Models & Data Quality"])
