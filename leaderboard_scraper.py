@@ -48,13 +48,13 @@ def get_top_crypto_traders(limit=100):
         return []
 
 
-def get_recent_btc_trades(wallet_address, limit=15):
-    """Fetches recent trades for a specific wallet and filters for BTC markets."""
-    url = "https://data-api.polymarket.com/activity"
+def get_recent_btc_trades(wallet_address, limit=50):
+    """Fetch recent wallet trades from the public Data API and filter for BTC markets."""
+    url = "https://data-api.polymarket.com/trades"
     params = {
         "user": wallet_address,
         "limit": limit,
-        "type": "TRADE",
+        "side": "BUY",
     }
 
     try:
@@ -65,19 +65,21 @@ def get_recent_btc_trades(wallet_address, limit=15):
 
         signals = []
         for trade in trades:
-            title = trade.get("title", "").lower()
+            title = str(trade.get("title", ""))
+            title_l = title.lower()
 
             if (
-                "bitcoin" in title
-                or "btc" in title
-                or "bitcoin para cima ou para baixo" in title
-                or "para cima ou para baixo" in title
+                "bitcoin" in title_l
+                or "btc" in title_l
+                or "bitcoin para cima ou para baixo" in title_l
+                or "para cima ou para baixo" in title_l
             ):
                 signals.append(
                     {
                         "trader_wallet": wallet_address,
-                        "market_title": trade.get("title"),
+                        "market_title": title,
                         "condition_id": trade.get("conditionId"),
+                        "outcome": trade.get("outcome"),
                         "side": trade.get("side"),
                         "price": float(trade.get("price", 0)),
                         "size": float(trade.get("size", 0)),
@@ -86,14 +88,14 @@ def get_recent_btc_trades(wallet_address, limit=15):
                 )
         return signals
     except Exception as e:
-        logging.error(f"Error fetching activity for {wallet_address[:8]}...: {e}")
+        logging.error(f"Error fetching trades for {wallet_address[:8]}...: {e}")
         return []
 
 
 def run_scraper_cycle():
     """Main execution loop to pull the latest Alpha Signals."""
     logging.info("Starting Alpha Signal Scraper cycle...")
-    top_traders = get_top_crypto_traders(limit=50)
+    top_traders = get_top_crypto_traders(limit=100)
 
     all_signals = []
     for trader in top_traders:

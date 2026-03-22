@@ -43,10 +43,14 @@ def fetch_btc_markets(limit=1000, closed=False):
         ]
 
         if any(keyword in text_blob for keyword in btc_keywords):
+            clob_token_ids = market.get("clobTokenIds") or []
+            yes_token_id = clob_token_ids[0] if len(clob_token_ids) > 0 else None
+            no_token_id = clob_token_ids[1] if len(clob_token_ids) > 1 else None
             btc_markets.append(
                 {
                     "timestamp": datetime.utcnow().isoformat(),
                     "market_id": market.get("id"),
+                    "condition_id": market.get("conditionId"),
                     "question": question or title,
                     "active": market.get("active"),
                     "closed": market.get("closed"),
@@ -55,6 +59,9 @@ def fetch_btc_markets(limit=1000, closed=False):
                     "last_trade_price": market.get("lastTradePrice", 0),
                     "end_date": market.get("endDate"),
                     "slug": market.get("slug"),
+                    "clob_token_ids": clob_token_ids,
+                    "yes_token_id": yes_token_id,
+                    "no_token_id": no_token_id,
                     "url": f"https://polymarket.com/event/{market.get('slug')}" if market.get("slug") else None,
                 }
             )
