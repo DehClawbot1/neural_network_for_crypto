@@ -830,8 +830,37 @@ def render_positions(positions_df, closed_positions_df):
         if positions_df.empty:
             st.info("No open paper positions.")
         else:
-            cols = [c for c in ["position_id", "market", "token_id", "condition_id", "outcome_side", "entry_price", "current_price", "shares", "market_value", "unrealized_pnl", "realized_pnl", "confidence", "position_action", "opened_at"] if c in positions_df.columns]
-            st.dataframe(positions_df.tail(20)[cols] if cols else positions_df.tail(20), width="stretch")
+            open_view = positions_df.copy().tail(20)
+            if "opened_at" in open_view.columns:
+                opened_ts = pd.to_datetime(open_view["opened_at"], errors="coerce", utc=True)
+                open_view["position_age"] = (((pd.Timestamp.utcnow() - opened_ts).dt.total_seconds()) / 60).round(1)
+            if "confidence_at_entry" not in open_view.columns and "confidence" in open_view.columns:
+                open_view["confidence_at_entry"] = open_view["confidence"]
+            if "max_favorable_excursion" not in open_view.columns and "mfe" in open_view.columns:
+                open_view["max_favorable_excursion"] = open_view["mfe"]
+            if "max_adverse_excursion" not in open_view.columns and "mae" in open_view.columns:
+                open_view["max_adverse_excursion"] = open_view["mae"]
+            if "status" not in open_view.columns:
+                open_view["status"] = "OPEN"
+            display_cols = [c for c in ["market", "outcome_side", "entry_price", "current_price", "shares", "market_value", "unrealized_pnl", "realized_pnl", "confidence_at_entry", "position_age", "max_favorable_excursion", "max_adverse_excursion", "status"] if c in open_view.columns]
+            open_view = open_view[display_cols].rename(columns={"outcome_side": "side"}).fillna("N/A")
+
+            def _row_style(row):
+                pnl = row.get("unrealized_pnl", "N/A")
+                current_price = row.get("current_price", "N/A")
+                if pnl == "N/A" or current_price == "N/A":
+                    return ["background-color: rgba(245, 158, 11, 0.18)"] * len(row)
+                try:
+                    pnl_value = float(pnl)
+                    if pnl_value > 0:
+                        return ["background-color: rgba(34, 197, 94, 0.14)"] * len(row)
+                    if pnl_value < 0:
+                        return ["background-color: rgba(239, 68, 68, 0.14)"] * len(row)
+                except Exception:
+                    return ["background-color: rgba(245, 158, 11, 0.18)"] * len(row)
+                return [""] * len(row)
+
+            st.dataframe(open_view.style.apply(_row_style, axis=1), width="stretch")
     with c2:
         st.markdown("**Closed Positions**")
         if closed_positions_df.empty:
