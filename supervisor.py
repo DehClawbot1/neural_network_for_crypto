@@ -15,7 +15,6 @@ from alerts_engine import AlertsEngine
 from trader_analytics import TraderAnalytics
 from historical_dataset_builder import HistoricalDatasetBuilder
 from backtester import StrategyBacktester
-from simulation_engine import SimulationEngine
 from autonomous_monitor import AutonomousMonitor
 from retrainer import Retrainer
 from position_manager import PositionManager
@@ -204,7 +203,6 @@ def main_loop():
     trader_analytics = TraderAnalytics()
     dataset_builder = HistoricalDatasetBuilder()
     backtester = StrategyBacktester()
-    simulation_engine = SimulationEngine()
     position_manager = PositionManager()
     autonomous_monitor = AutonomousMonitor()
     retrainer = Retrainer()
@@ -283,7 +281,6 @@ def main_loop():
                 if action_val != 0:
                     size = 10 if action_val == 1 else 50
                     fill_price = min(0.99, float(signal_row.get("current_price", 0.5)) + 0.01)
-                    simulation_engine.open_position(signal_row, size_usdc=size, fill_price=fill_price)
                     position_manager.open_position(signal_row, size_usdc=size, fill_price=fill_price)
 
             # 5. Phase 2 analytics outputs
