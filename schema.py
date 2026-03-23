@@ -13,16 +13,16 @@ CANONICAL = {
 }
 
 ALIASES = {
-    "wallet_copied": ["wallet_copied", "trader_wallet", "wallet"],
+    "wallet_copied": ["wallet_copied", "wallet"],
     "market_title": ["market_title", "market", "question", "title"],
     "market_id": ["market_id", "id"],
-    "token_id": ["token_id", "yes_token_id"],
+    "token_id": ["token_id"],
     "condition_id": ["condition_id"],
     "order_side": ["order_side", "trade_side"],
     "outcome_side": ["outcome_side", "side"],
     "entry_intent": ["entry_intent"],
     "timestamp": ["timestamp", "updated_at", "created_at"],
-    "entry_price": ["entry_price", "price", "current_price"],
+    "entry_price": ["entry_price"],
     "forward_return_15m": ["forward_return_15m", "future_return"],
     "tp_before_sl_60m": ["tp_before_sl_60m", "tp_hit_before_sl"],
 }
@@ -50,3 +50,4 @@ def normalize_dataframe_columns(df):
                 out = out.rename(columns={alias: canonical})
                 break
     return out
+
