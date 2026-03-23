@@ -111,22 +111,28 @@ class PolyTradeEnv(gym.Env):
         time_to_close = safe_float("time_to_close_minutes", 0.0)
         liquidity = safe_float("liquidity_score", 0.0)
         drawdown = min(0.0, unrealized)
-        state = np.array(
-            [
-                float(price),
-                float(self.entry_price if self.position_open else price),
-                float(self.inventory_fraction),
-                float(self.shares),
-                safe_float("confidence", 0.0),
-                safe_float("edge_score", 0.0),
-                float(realized_vol),
-                float(self.position_age / max(1, self.max_hold_steps)),
-                float(np.nan_to_num(drawdown, nan=0.0)),
-                float(spread + liquidity + (time_to_close / max(1.0, time_to_close + 1.0))),
-            ],
-            dtype=np.float32,
-        )
-        self.state = np.clip(np.nan_to_num(state, nan=0.0, posinf=10.0, neginf=-10.0), -10.0, 10.0)
+        raw_state = [
+            float(price),
+            float(self.entry_price if self.position_open else price),
+            float(self.inventory_fraction),
+            float(self.shares),
+            safe_float("confidence", 0.0),
+            safe_float("edge_score", 0.0),
+            float(realized_vol),
+            float(self.position_age / max(1, self.max_hold_steps)),
+            float(np.nan_to_num(drawdown, nan=0.0)),
+            float(spread + liquidity + (time_to_close / max(1.0, time_to_close + 1.0))),
+        ]
+        clean_state = []
+        for value in raw_state:
+            try:
+                scalar = float(value)
+            except (TypeError, ValueError):
+                scalar = 0.0
+            if not np.isfinite(scalar):
+                scalar = 0.0
+            clean_state.append(min(10.0, max(-10.0, scalar)))
+        self.state = np.asarray(clean_state, dtype=np.float32)
         return self.state
 
     def reset(self, seed=None, options=None):
