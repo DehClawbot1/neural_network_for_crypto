@@ -14,7 +14,7 @@ CANONICAL = {
 }
 
 ALIASES = {
-    "wallet_copied": ["wallet_copied", "wallet"],
+    "wallet_copied": ["wallet_copied", "wallet", "trader_wallet"],
     "market_title": ["market_title", "market", "question", "title"],
     "market_id": ["market_id", "id"],
     "token_id": ["token_id"],
