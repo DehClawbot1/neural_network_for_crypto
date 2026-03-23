@@ -36,6 +36,8 @@ class ReconciliationService:
     def reconcile(self):
         local_orders = self._safe_read(self.orders_file)
         local_trades = self._safe_read(self.trades_file)
+        if not local_orders.empty and "status" in local_orders.columns:
+            local_orders = local_orders[local_orders["status"].astype(str).str.upper().isin(["OPEN", "SUBMITTED"])]
 
         remote_orders_df = self._normalize_df(self.client.get_open_orders())
         remote_trades_df = self._normalize_df(self.client.get_trades())
@@ -84,3 +86,4 @@ class ReconciliationService:
 
         report["order_mismatches"] = status_mismatches
         return report, remote_orders_df, remote_trades_df
+
