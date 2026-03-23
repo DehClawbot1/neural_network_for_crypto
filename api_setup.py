@@ -93,14 +93,13 @@ if __name__ == "__main__":
         start_bot = input("Start run_bot.py now? [y/N]: ").strip().lower()
         start_dashboard = input("Start dashboard.py now? [y/N]: ").strip().lower()
 
-        bot_process = None
-        if start_bot in {"y", "yes"}:
-            bot_process = subprocess.Popen([sys.executable, "run_bot.py"])
-
-        if start_dashboard in {"y", "yes"}:
-            subprocess.Popen([sys.executable, "-m", "streamlit", "run", "dashboard.py"])
-
-        if not bot_process and start_dashboard not in {"y", "yes"}:
+        if start_bot in {"y", "yes"} and start_dashboard in {"y", "yes"}:
+            subprocess.run([sys.executable, "run_bot_and_dashboard.py"], check=False)
+        elif start_bot in {"y", "yes"}:
+            subprocess.run([sys.executable, "run_bot.py"], check=False)
+        elif start_dashboard in {"y", "yes"}:
+            subprocess.run([sys.executable, "-m", "streamlit", "run", "dashboard.py"], check=False)
+        else:
             print("[+] Setup complete. You may start run_bot.py and dashboard.py manually.")
     else:
         print("\n[-] Validation failed or template generated. Please check your .env file and run again.")
