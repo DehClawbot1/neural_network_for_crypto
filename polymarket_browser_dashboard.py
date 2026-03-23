@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import streamlit as st
 
@@ -54,7 +55,8 @@ def main():
     client = get_client()
 
     st.sidebar.header("Inputs")
-    wallet = st.sidebar.text_input("Wallet address", "")
+    default_wallet = os.getenv("POLYMARKET_PUBLIC_ADDRESS", "")
+    wallet = st.sidebar.text_input("Wallet address", default_wallet)
     market_id = st.sidebar.text_input("Condition ID for market positions", "")
     limit = st.sidebar.slider("Limit", min_value=10, max_value=500, value=100, step=10)
     offset = st.sidebar.number_input("Offset", min_value=0, max_value=10000, value=0, step=10)

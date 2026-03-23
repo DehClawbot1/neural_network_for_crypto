@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 
+from polymarket_profile_client import prompt_polymarket_runtime
+
 
 def run_browser_api():
     subprocess.run(
@@ -20,6 +22,9 @@ def run_browser_dashboard():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    cfg = prompt_polymarket_runtime()
+    if cfg.get("wallet"):
+        os.environ["POLYMARKET_PUBLIC_ADDRESS"] = cfg["wallet"]
     print("[+] Starting Polymarket Browser API and Browser Dashboard...")
     print("    API:       http://127.0.0.1:8001/docs")
     print("    Dashboard: http://127.0.0.1:8502")
