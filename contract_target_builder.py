@@ -83,6 +83,8 @@ class ContractTargetBuilder:
 
     def build(self, forward_minutes=15, max_hold_minutes=60, tp_move=0.04, sl_move=0.03):
         signals_df = self._safe_read(self.raw_candidates_file)
+        if signals_df.empty:
+            signals_df = self._safe_read(self.signals_file)
         markets_df = self._safe_read(self.markets_file)
         history_df = self._safe_read(self.clob_history_file)
 
