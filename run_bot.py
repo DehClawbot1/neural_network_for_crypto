@@ -3,6 +3,7 @@ import sys
 import logging
 from pathlib import Path
 
+from dotenv import load_dotenv
 from api_setup import validate_environment
 from rl_trainer import train_model
 from supervisor import main_loop, load_brain
@@ -13,6 +14,8 @@ from real_pipeline import run_research_pipeline
 from execution_client import ExecutionClient
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+load_dotenv()
 
 WEIGHTS_PATH = Path("weights/ppo_polytrader.zip")
 
