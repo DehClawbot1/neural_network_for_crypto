@@ -12,6 +12,9 @@ def prompt_runtime_config():
         trading_mode = input("TRADING_MODE [paper/live]: ").strip().lower() or "paper"
         os.environ["TRADING_MODE"] = trading_mode
 
+    if not os.getenv("POLYMARKET_PUBLIC_ADDRESS"):
+        os.environ["POLYMARKET_PUBLIC_ADDRESS"] = input("POLYMARKET_PUBLIC_ADDRESS (optional for public profile/data endpoints): ").strip()
+
     if trading_mode == "live":
         if not os.getenv("POLYMARKET_FUNDER"):
             os.environ["POLYMARKET_FUNDER"] = input("POLYMARKET_FUNDER: ").strip()
@@ -41,6 +44,7 @@ def validate_environment():
             f.write("TRADING_MODE=paper\n")
             f.write("SIMULATED_STARTING_BALANCE=1000\n")
             f.write("MAX_RISK_PER_TRADE=50\n")
+            f.write("POLYMARKET_PUBLIC_ADDRESS=\n")
             f.write("# For live-test branch only:\n")
             f.write("# PRIVATE_KEY=\n")
             f.write("# POLYMARKET_FUNDER=\n")
