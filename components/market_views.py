@@ -17,7 +17,7 @@ def render_market_tracker(markets_df):
     sort_by = st.selectbox("Sort markets by", ["recent movement", "liquidity", "volume"])
 
     view = markets_df.copy()
-    market_col = "question" if "question" in view.columns else "market" if "market" in view.columns else None
+    market_col = "market_title" if "market_title" in view.columns else "question" if "question" in view.columns else "market" if "market" in view.columns else None
     price_col = "last_trade_price" if "last_trade_price" in view.columns else "current_price" if "current_price" in view.columns else None
     if search_text and market_col:
         view = view[view[market_col].astype(str).str.contains(search_text, case=False, na=False)]
