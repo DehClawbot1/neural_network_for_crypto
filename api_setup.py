@@ -1,6 +1,5 @@
 import os
 import logging
-from getpass import getpass
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,13 +18,13 @@ def prompt_runtime_config():
         if not os.getenv("POLYMARKET_FUNDER"):
             os.environ["POLYMARKET_FUNDER"] = input("POLYMARKET_FUNDER: ").strip()
         if not os.getenv("PRIVATE_KEY"):
-            os.environ["PRIVATE_KEY"] = getpass("PRIVATE_KEY: ").strip()
+            os.environ["PRIVATE_KEY"] = input("PRIVATE_KEY (shown while typing): ").strip()
         if not os.getenv("POLYMARKET_API_KEY"):
-            os.environ["POLYMARKET_API_KEY"] = input("POLYMARKET_API_KEY (optional, press enter to skip): ").strip()
+            os.environ["POLYMARKET_API_KEY"] = input("POLYMARKET_API_KEY (shown while typing, optional): ").strip()
         if not os.getenv("POLYMARKET_API_SECRET"):
-            os.environ["POLYMARKET_API_SECRET"] = getpass("POLYMARKET_API_SECRET (optional): ").strip()
+            os.environ["POLYMARKET_API_SECRET"] = input("POLYMARKET_API_SECRET (shown while typing, optional): ").strip()
         if not os.getenv("POLYMARKET_API_PASSPHRASE"):
-            os.environ["POLYMARKET_API_PASSPHRASE"] = getpass("POLYMARKET_API_PASSPHRASE (optional): ").strip()
+            os.environ["POLYMARKET_API_PASSPHRASE"] = input("POLYMARKET_API_PASSPHRASE (shown while typing, optional): ").strip()
     return trading_mode
 
 
