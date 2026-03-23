@@ -59,7 +59,9 @@ Public / research side uses:
 - `run_paper.py` — explicit paper launcher
 - `run_live_test.py` — explicit live-test launcher
 - `run_everything.py` — unified multiprocessing launcher for execution + nearline learning on `live-test`
+- `main_shadow.py` — shadow intent capture + async resolver loop
 - `dashboard.py` — Streamlit UI
+- `pages/1_Account_Profile.py` — Streamlit account-profile / public-profile page
 - `web_api.py` — local API / docs
 
 ### High-level runtime flow
@@ -154,6 +156,13 @@ pnl = shares * (exit_price - entry_price) - fees
 - `api_setup.py`
 - `incident_manager.py`
 - `live_replay_buffer.py`
+- `shadow_purgatory.py`
+- `shadow_logger.py`
+- `main_shadow.py`
+- `shadow_execution_audit.py`
+- `shadow_slippage_calibration.py`
+- `shadow_doa_resurrection.py`
+- `shadow_limit_order_simulator.py`
 
 ---
 
@@ -211,6 +220,11 @@ The `live-test` branch now includes:
 - anomaly detection
 - prediction-health / drift monitoring
 - data-quality / schema-health views
+- shadow intent / resolution logging in `logs/shadow_results.csv`
+- execution-tax auditing for shadow trades
+- slippage calibration / veto-rate auditing
+- DOA resurrection / ghost-win auditing
+- limit-order simulation for vetoed trades
 
 ---
 
@@ -352,6 +366,7 @@ Ctrl + F5
 
 Generated in `logs/`:
 - `signals.csv`
+- `raw_candidates.csv`
 - `execution_log.csv`
 - `daily_summary.txt`
 - `markets.csv`
@@ -362,6 +377,10 @@ Generated in `logs/`:
 - `closed_positions.csv`
 - `historical_dataset.csv`
 - `contract_targets.csv`
+- `wallet_alpha.csv`
+- `wallet_alpha_history.csv`
+- `sequence_dataset.csv`
+- `shadow_results.csv`
 - `supervised_eval.csv`
 - `time_split_eval.csv`
 - `stage2_temporal_eval.csv`
@@ -382,17 +401,35 @@ Generated in `weights/`:
 - `stage2_sequence_regressor.pt`
 - `stage2_transformer.pt`
 - `feature_autoencoder.pt`
+- `meta_model_bundle_*.pkl`
+- `model_registry.csv`
 - `ppo_polytrader.zip`
 
 ---
 
 ## Testing
 
-Run tests with:
+Run the full local suite with:
 
 ```bash
 pytest -q
 ```
+
+Run the scoped CI-equivalent check with:
+
+```bash
+python -m pytest -q --cov=order_manager --cov=execution_client --cov=reconciliation_service --cov=position_manager --cov=contract_target_builder --cov-fail-under=60
+```
+
+Recent additions now cover:
+- shadow purgatory / DOA logic
+- CLOB retry resilience
+- stateful feature-builder wallet stats
+- database schema + event logging
+- Polymarket auth / info retrieval
+- Stage 2 temporal preprocessing
+- Stage 2 transformer sequence reshaping
+- DOA resurrection auditing
 
 Basic CI and smoke checks are already in the repo.
 
