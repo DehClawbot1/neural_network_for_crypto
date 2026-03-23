@@ -98,7 +98,7 @@ def render_whale_tracker(whales_df):
         st.info("No whale summary yet.")
         return
 
-    wallet_col = "wallet" if "wallet" in whales_df.columns else "trader_wallet" if "trader_wallet" in whales_df.columns else None
+    wallet_col = "wallet_copied" if "wallet_copied" in whales_df.columns else "wallet" if "wallet" in whales_df.columns else "trader_wallet" if "trader_wallet" in whales_df.columns else None
     market_col = "market" if "market" in whales_df.columns else "market_title" if "market_title" in whales_df.columns else "top_market" if "top_market" in whales_df.columns else None
     watched_wallets_count = int(whales_df[wallet_col].nunique()) if wallet_col else len(whales_df)
     most_active_wallet = str(whales_df[wallet_col].astype(str).value_counts().idxmax()) if wallet_col else "-"
