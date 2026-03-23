@@ -3,6 +3,7 @@ from pathlib import Path
 from datetime import datetime
 
 import pandas as pd
+from dotenv import load_dotenv
 import plotly.express as px
 import streamlit as st
 from pandas.io.formats.style import Styler
@@ -45,6 +46,8 @@ PATH_REPLAY_FILE = LOGS_DIR / "path_replay_backtest.csv"
 BACKTEST_BY_WALLET_FILE = LOGS_DIR / "backtest_by_wallet.csv"
 SHADOW_RESULTS_FILE = LOGS_DIR / "shadow_results.csv"
 MODEL_REGISTRY_FILE = BASE_DIR / "weights" / "model_registry.csv"
+
+load_dotenv()
 
 st.set_page_config(page_title="Neural Network for Crypto", page_icon="📈", layout="wide")
 
