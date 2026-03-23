@@ -44,24 +44,34 @@ class SupervisedModels:
         if df.empty:
             return None
 
-        usable = [c for c in self.FEATURE_COLUMNS if c in df.columns]
+        if "timestamp" in df.columns:
+            df = df.copy()
+            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+            df = df.sort_values("timestamp", kind="stable")
+
+        split_idx = int(len(df) * 0.8)
+        train_df = df.iloc[:split_idx] if split_idx > 0 else df
+        if train_df.empty:
+            return None
+
+        usable = [c for c in self.FEATURE_COLUMNS if c in train_df.columns]
         if not usable:
             return None
 
-        if "tp_before_sl_60m" in df.columns:
+        if "tp_before_sl_60m" in train_df.columns:
             clf = Pipeline([
                 ("imputer", SimpleImputer(strategy="median")),
                 ("model", RandomForestClassifier(n_estimators=250, random_state=42, class_weight="balanced")),
             ])
-            clf.fit(df[usable], df["tp_before_sl_60m"].fillna(0).astype(int))
+            clf.fit(train_df[usable], train_df["tp_before_sl_60m"].fillna(0).astype(int))
             joblib.dump({"model": clf, "features": usable}, self.classifier_file)
 
-        if "forward_return_15m" in df.columns:
+        if "forward_return_15m" in train_df.columns:
             reg = Pipeline([
                 ("imputer", SimpleImputer(strategy="median")),
                 ("model", RandomForestRegressor(n_estimators=250, random_state=42)),
             ])
-            reg.fit(df[usable], df["forward_return_15m"].fillna(0.0))
+            reg.fit(train_df[usable], train_df["forward_return_15m"].fillna(0.0))
             joblib.dump({"model": reg, "features": usable}, self.regressor_file)
 
         return usable

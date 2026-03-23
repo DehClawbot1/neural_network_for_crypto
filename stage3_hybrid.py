@@ -77,7 +77,10 @@ class Stage3HybridScorer:
             ).astype(int)
         else:
             out["rf_probability"] = out["p_tp_before_sl"].astype(float)
-            out["nn_probability"] = out.get("temporal_expected_return", 0.0)
+            out["nn_probability"] = out.get("temporal_p_tp_before_sl", 0.5)
+            if not isinstance(out["nn_probability"], pd.Series):
+                out["nn_probability"] = pd.Series([float(out["nn_probability"])] * len(out), index=out.index)
+            out["nn_probability"] = out["nn_probability"].astype(float)
             out["ensemble_agreement"] = 0
             out["ensemble_probability"] = out["rf_probability"]
             out["ensemble_live_candidate"] = 0
