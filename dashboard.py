@@ -848,6 +848,7 @@ def render_positions(positions_df, closed_positions_df):
                 open_view["status"] = "OPEN"
             display_cols = [c for c in ["market", "outcome_side", "entry_price", "current_price", "shares", "market_value", "unrealized_pnl", "realized_pnl", "confidence_at_entry", "position_age", "max_favorable_excursion", "max_adverse_excursion", "status"] if c in open_view.columns]
             open_view = open_view[display_cols].rename(columns={"outcome_side": "side"}).fillna("N/A")
+            open_view = ensure_arrow_compatible(open_view)
 
             def _row_style(row):
                 pnl = row.get("unrealized_pnl", "N/A")
