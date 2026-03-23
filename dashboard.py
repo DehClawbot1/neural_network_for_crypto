@@ -311,6 +311,28 @@ def safe_streamlit_dataframe(data=None, *args, **kwargs):
 st.dataframe = safe_streamlit_dataframe
 
 
+def render_live_account_status():
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("Live API Status (Polymarket)")
+
+    if ExecutionClient is None:
+        st.sidebar.error("ExecutionClient module not found.")
+        return
+
+    if os.getenv("TRADING_MODE", "paper").lower() != "live":
+        st.sidebar.caption("Paper mode / live client not active.")
+        return
+
+    try:
+        client = ExecutionClient()
+        balance = client.get_available_balance()
+        st.sidebar.success("✅ API Connected")
+        st.sidebar.metric("Available USDC Balance", f"${balance:.2f}")
+    except Exception as e:
+        st.sidebar.error("❌ API Connection Failed")
+        st.sidebar.caption(f"Error: {str(e)}")
+
+
 def render_overview(signals_df, trades_df, markets_df, alerts_df, positions_df, closed_positions_df):
     st.markdown('<div class="section-title">Overview</div>', unsafe_allow_html=True)
 
@@ -1474,17 +1496,7 @@ def main():
     st.sidebar.write(f"Alerts count: {len(alerts_df)}")
     st.sidebar.write(f"Last signal timestamp: {latest_signal_ts.strftime('%Y-%m-%d %H:%M:%S') if latest_signal_ts is not None else 'N/A'}")
 
-    st.sidebar.markdown("**Live Account Status**")
-    if ExecutionClient is not None and os.getenv("TRADING_MODE", "paper").lower() == "live":
-        try:
-            live_client = ExecutionClient()
-            balance_payload = live_client.get_balance_allowance()
-            st.sidebar.write("Connection: Connected")
-            st.sidebar.write(f"Balance payload: {balance_payload}")
-        except Exception as exc:
-            st.sidebar.write(f"Connection: Error ({exc})")
-    else:
-        st.sidebar.write("Connection: Paper / unavailable")
+    render_live_account_status()
 
     st.sidebar.markdown("**Export**")
     st.sidebar.download_button("Export filtered signals", data=signals_df.to_csv(index=False).encode("utf-8"), file_name="filtered_signals.csv", mime="text/csv")
