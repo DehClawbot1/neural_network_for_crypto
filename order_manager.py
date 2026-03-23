@@ -101,6 +101,14 @@ class OrderManager:
                 last_response = None
             status = str((last_response or {}).get("status", "")).upper()
             if status in ["FILLED", "EXECUTED", "MATCHED"]:
+                fill_payload = {
+                    "trade_id": (last_response or {}).get("id", order_id),
+                    "order_id": order_id,
+                    "token_id": (last_response or {}).get("token_id", ""),
+                    "price": float((last_response or {}).get("price", 0.0) or 0.0),
+                    "size": float((last_response or {}).get("size", 0.0) or 0.0),
+                }
+                self.record_fill(fill_payload)
                 return {"filled": True, "response": last_response}
             if status in ["CANCELED", "FAILED", "REJECTED"]:
                 return {"filled": False, "response": last_response}
