@@ -73,10 +73,12 @@ class ExecutionClient:
         signed_order = self.client.create_order(args, options=options or {})
         return self.client.post_order(signed_order, order_type_const)
 
-    def create_and_post_market_order(self, token_id, amount, side="BUY"):
+    def create_and_post_market_order(self, token_id, amount, side="BUY", order_type="FOK"):
         side_const = self.BUY if str(side).upper() == "BUY" else self.SELL
+        order_type_const = getattr(self.OrderType, str(order_type).upper())
         args = self.MarketOrderArgs(token_id=token_id, amount=float(amount), side=side_const)
-        return self.client.create_and_post_market_order(args)
+        signed_order = self.client.create_market_order(args)
+        return self.client.post_order(signed_order, order_type_const)
 
     def cancel_order(self, order_id):
         return self.client.cancel(order_id)
