@@ -92,15 +92,10 @@ def _read_live_client_state() -> Dict[str, Any]:
         result["funder"] = client_funder or result["funder"] or fallback_address
         result["address_source"] = "client_funder" if client_funder else fallback_source
         collat = client.get_balance_allowance(asset_type="COLLATERAL")
-        cond = client.get_balance_allowance(asset_type="CONDITIONAL")
         result["client_ok"] = True
-        collat = client.get_balance_allowance(asset_type="COLLATERAL")
-        cond = client.get_balance_allowance(asset_type="CONDITIONAL")
         if isinstance(collat, dict):
             result["collateral_balance"] = _safe_float(collat.get("balance", collat.get("amount")))
             result["collateral_allowance"] = _safe_float(collat.get("allowance"))
-        if isinstance(cond, dict):
-            result["conditional_allowance"] = _safe_float(cond.get("allowance"))
     except Exception as exc:
         result["client_error"] = str(exc)
     return result
