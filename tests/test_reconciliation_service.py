@@ -6,6 +6,29 @@ from reconciliation_service import ReconciliationService
 
 
 @patch("reconciliation_service.ExecutionClient")
+def test_reconcile_detects_missing_remote_open_order(mock_client_cls, tmp_path):
+    pd.DataFrame(
+        [
+            {"order_id": "order_1", "status": "OPEN", "size": 10.0},
+            {"order_id": "order_2", "status": "OPEN", "size": 20.0},
+        ]
+    ).to_csv(tmp_path / "live_orders.csv", index=False)
+    pd.DataFrame([]).to_csv(tmp_path / "live_fills.csv", index=False)
+
+    client = mock_client_cls.return_value
+    client.get_open_orders.return_value = [{"order_id": "order_1", "status": "OPEN", "size": 10.0}]
+    client.get_trades.return_value = []
+
+    service = ReconciliationService(logs_dir=tmp_path)
+    report, _, _ = service.reconcile()
+
+    assert report["local_order_rows"] == 2
+    assert report["remote_open_orders"] == 1
+    assert "order_2" in report["missing_remote_orders"]
+    assert len(report["order_mismatches"]) == 0
+
+
+@patch("reconciliation_service.ExecutionClient")
 def test_reconcile_filters_out_closed_local_orders(mock_client_cls, tmp_path):
     logs = tmp_path
 
