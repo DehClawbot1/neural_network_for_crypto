@@ -2,6 +2,7 @@ import os
 import time
 import importlib.util
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.env_util import make_vec_env
 from polytrade_env import PolyTradeEnv
 from live_replay_buffer import LiveReplayBuffer, LiveReplayDatasetEnv
@@ -13,7 +14,7 @@ os.makedirs("logs", exist_ok=True)
 
 def train_model(timesteps=10000):
     """
-    Initializes the environment, builds the PPO model, and trains it.
+    Initializes the environment, wraps it with normalization, builds the PPO model, and trains it.
     """
     print(f"[+] Starting RL training phase for {timesteps} timesteps...")
 
@@ -27,25 +28,28 @@ def train_model(timesteps=10000):
     if not progress_bar_available:
         print("[!] tqdm/rich not fully installed. Continuing without progress bar.")
 
-    # Vectorize the environment (SB3 requirement for efficient training)
-    env = make_vec_env(lambda: PolyTradeEnv(), n_envs=1)
+    def make_env():
+        return PolyTradeEnv()
 
-    # Initialize PPO agent
-    # MlpPolicy is standard for flat array observations
+    venv = DummyVecEnv([make_env])
+    env = VecNormalize(venv, norm_obs=True, norm_reward=True, clip_obs=10.0)
+
     model = PPO(
         "MlpPolicy",
         env,
         verbose=1,
-        learning_rate=0.0003,
+        learning_rate=3e-4,
+        n_steps=2048,
+        batch_size=64,
+        ent_coef=0.01,
         tensorboard_log="./logs/" if tensorboard_available else None,
     )
 
-    # Train the agent
     model.learn(total_timesteps=timesteps, progress_bar=progress_bar_available)
 
-    # Save the model weights locally
     save_path = "weights/ppo_polytrader"
     model.save(save_path)
+    env.save("weights/ppo_polytrader_vecnormalize.pkl")
     print(f"[+] Model saved successfully to {save_path}.zip")
 
     return model, env
