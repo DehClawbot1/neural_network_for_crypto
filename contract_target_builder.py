@@ -122,6 +122,15 @@ class ContractTargetBuilder:
                 sl_move,
             )
 
+            exact_forward_window = token_history[
+                (token_history["timestamp"] > signal_ts)
+                & (token_history["timestamp"] <= signal_ts + pd.Timedelta(minutes=forward_minutes))
+            ].copy()
+            labels["forward_return_15m"] = None
+            if not exact_forward_window.empty:
+                future_prices = exact_forward_window["price"].astype(float)
+                labels["forward_return_15m"] = (float(future_prices.iloc[-1]) - entry_price) / entry_price if entry_price else None
+
             row = signal_row.to_dict()
             row.update(
                 {
