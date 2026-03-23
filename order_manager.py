@@ -45,8 +45,13 @@ class OrderManager:
             return row, None
 
         readiness = self.check_readiness(asset_type="COLLATERAL")
+        available_balance = float(readiness.get("balance", readiness.get("amount", 0.0))) if isinstance(readiness, dict) else 0.0
         if not readiness:
             row = {"timestamp": datetime.utcnow().isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "REJECTED", "reason": "missing_readiness"}
+            self._append(self.orders_file, row)
+            return row, None
+        if available_balance < float(size):
+            row = {"timestamp": datetime.utcnow().isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "REJECTED", "reason": "insufficient_funds", "available_balance": available_balance}
             self._append(self.orders_file, row)
             return row, None
 
@@ -180,3 +185,4 @@ class OrderManager:
             (row.get("trade_id") or row.get("fill_id"), row.get("order_id"), row.get("token_id"), row.get("price"), row.get("size"), row.get("timestamp")),
         )
         return fill_payload
+
