@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +14,22 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 class MetaModelTrainer:
+    @staticmethod
+    def _get_clean_features(df):
+        allowed_patterns = [
+            r'^entry_price(_lag_\d+)?$',
+            r'^spread(_lag_\d+)?$',
+            r'^wallet_.*_30d$',
+            r'^wallet_signal_precision.*$',
+            r'^btc_spot_return_.*$',
+            r'^recent_.*_5$',
+            r'^normalized_trade_size$',
+        ]
+        features = [c for c in df.columns if any(re.match(p, c) for p in allowed_patterns)]
+        forbidden = ['horizon', 'mfe', 'mae', 'pnl', 'exit', 'hit', 'target', 'within']
+        features = [f for f in features if not any(word in f.lower() for word in forbidden)]
+        return features
+
     @staticmethod
     def _sanitize_sequence_data(df):
         targets_to_kill = [c for c in df.columns if 'tp_hit' in c or 'forward_return' in c or 'sl_hit' in c]
@@ -53,6 +70,10 @@ class MetaModelTrainer:
         y = df[self.target].fillna(0).astype(int)
         X = df.drop(columns=[self.target] + [c for c in self.ignored_cols if c in df.columns], errors="ignore")
         X = X.select_dtypes(include=["number", "bool"]).copy()
+        clean_features = self._get_clean_features(X)
+        if not clean_features:
+            raise ValueError("No clean past-only features available for meta-model training.")
+        X = X[clean_features].copy()
 
         split_idx = int(len(df) * 0.8)
         X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
