@@ -138,6 +138,9 @@ def test_balance_retrieval(mock_getenv):
     inner_client.get_balance_allowance.return_value = {"available_balance": "50.0"}
     assert client.get_available_balance() == 50.0
 
+    inner_client.get_balance_allowance.return_value = {"amount": "200.0"}
+    assert client.get_available_balance() == 200.0
+
     inner_client.get_balance_allowance.return_value = {"other_key": "10"}
     assert client.get_available_balance() == 0.0
 
