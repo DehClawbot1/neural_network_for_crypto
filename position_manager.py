@@ -173,8 +173,9 @@ class PositionManager:
         size_usdc = float(positions.at[idx, "size_usdc"] or 0.0)
         entry_price = float(positions.at[idx, "entry_price"] or 0.0)
         token_id = str(positions.at[idx, "token_id"] or "") if "token_id" in positions.columns else ""
-        exit_price = self.price_service.get_latest_price(token_id) if token_id else None
-        exit_price = float(exit_price if exit_price is not None else positions.at[idx, "current_price"] or entry_price)
+        quote = self.price_service.get_quote(token_id) if token_id else {}
+        live_price = quote.get("best_bid") or quote.get("price")
+        exit_price = float(live_price if live_price is not None else positions.at[idx, "current_price"] or entry_price)
 
         shares_closed = shares * fraction
         shares_remaining = shares - shares_closed
@@ -207,7 +208,8 @@ class PositionManager:
 
         row = positions[mask].iloc[0].to_dict()
         token_id = str(row.get("token_id", "") or "")
-        live_price = self.price_service.get_latest_price(token_id) if token_id else None
+        quote = self.price_service.get_quote(token_id) if token_id else {}
+        live_price = quote.get("best_bid") or quote.get("price")
         exit_price = float(live_price if live_price is not None else row.get("current_price", row.get("entry_price", 0.5)))
         entry_price = float(row.get("entry_price", exit_price))
         size_usdc = float(row.get("size_usdc", 0.0) or 0.0)
@@ -337,3 +339,4 @@ class PositionManager:
             return pd.read_csv(self.closed_file)
         except Exception:
             return pd.DataFrame()
+
