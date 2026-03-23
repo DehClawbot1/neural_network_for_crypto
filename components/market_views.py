@@ -34,9 +34,10 @@ def render_market_tracker(markets_df):
     elif sort_by == "volume" and "volume" in view.columns:
         view = view.sort_values("volume", ascending=False)
     elif sort_by == "recent movement":
-        movement_col = "price_change" if "price_change" in view.columns else price_col
-        if movement_col:
-            view = view.sort_values(movement_col, ascending=False)
+        if "price_change" in view.columns:
+            view = view.sort_values("price_change", ascending=False)
+        else:
+            st.warning("Price change data unavailable for sorting.")
 
     tracked_markets = len(view)
     avg_liquidity = float(pd.to_numeric(view["liquidity"], errors="coerce").fillna(0).mean()) if "liquidity" in view.columns and not view.empty else 0.0
