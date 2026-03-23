@@ -18,17 +18,17 @@ WEIGHTS_PATH = Path("weights/ppo_polytrader.zip")
 
 def print_banner():
     print("\n=== NEURAL NETWORK FOR CRYPTO ===")
-    print("Mode: PAPER OR LIVE-TEST / REAL-TIME PUBLIC DATA")
-    print("TRADING_MODE supported here: paper | live")
+    print("Mode: LIVE-TEST / REAL-TIME DATA")
+    print("TRADING_MODE required here: live")
     print("This launcher validates the environment, checks model weights, and starts the supervisor.\n")
 
 
 def ensure_environment():
     print("[1/3] Checking environment...")
-    trading_mode = os.getenv("TRADING_MODE", "paper").strip().lower()
-    if trading_mode not in {"paper", "live"}:
-        print(f"[!] Unsupported TRADING_MODE='{trading_mode}'.")
-        print("[!] Use TRADING_MODE=paper or TRADING_MODE=live.\n")
+    trading_mode = os.getenv("TRADING_MODE", "").strip().lower()
+    if trading_mode != "live":
+        print(f"[!] Invalid TRADING_MODE='{trading_mode or 'missing'}'.")
+        print("[!] This launcher now requires TRADING_MODE=live.\n")
         return False
 
     valid = validate_environment()

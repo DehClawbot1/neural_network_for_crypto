@@ -1,8 +1,10 @@
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
 
 try:
     from execution_client import ExecutionClient
@@ -14,6 +16,8 @@ try:
 except Exception:
     PolymarketProfileClient = None
 
+
+load_dotenv()
 
 st.set_page_config(page_title="Account Profile", page_icon="🪪", layout="wide")
 
@@ -41,12 +45,29 @@ def _profile_name(profile: Dict[str, Any]) -> str:
     return "Unknown profile"
 
 
-def _get_candidate_address() -> Optional[str]:
-    for key in ["POLYMARKET_PUBLIC_ADDRESS", "POLYMARKET_FUNDER"]:
-        value = os.getenv(key, "").strip()
-        if value:
-            return value
-    return None
+def _derive_address_from_private_key() -> Optional[str]:
+    private_key = os.getenv("PRIVATE_KEY", "").strip()
+    if not private_key:
+        return None
+    try:
+        from eth_account import Account
+        acct = Account.from_key(private_key)
+        return str(acct.address)
+    except Exception:
+        return None
+
+
+def _get_candidate_address_with_source() -> tuple[Optional[str], str]:
+    public_address = os.getenv("POLYMARKET_PUBLIC_ADDRESS", "").strip()
+    if public_address:
+        return public_address, "env:POLYMARKET_PUBLIC_ADDRESS"
+    funder = os.getenv("POLYMARKET_FUNDER", "").strip()
+    if funder:
+        return funder, "env:POLYMARKET_FUNDER"
+    derived = _derive_address_from_private_key()
+    if derived:
+        return derived, "derived_from_private_key"
+    return None, "missing"
 
 
 def _read_live_client_state() -> Dict[str, Any]:
@@ -55,16 +76,24 @@ def _read_live_client_state() -> Dict[str, Any]:
         "client_ok": False,
         "client_error": None,
         "funder": os.getenv("POLYMARKET_FUNDER", "").strip() or None,
+        "address_source": "missing",
         "collateral_balance": None,
         "collateral_allowance": None,
         "conditional_allowance": None,
     }
+    fallback_address, fallback_source = _get_candidate_address_with_source()
+    result["address_source"] = fallback_source
     if ExecutionClient is None or not result["live_mode"]:
+        result["funder"] = result["funder"] or fallback_address
         return result
     try:
         client = ExecutionClient()
+        client_funder = getattr(client, "funder", None)
+        result["funder"] = client_funder or result["funder"] or fallback_address
+        result["address_source"] = "client_funder" if client_funder else fallback_source
+        collat = client.get_balance_allowance(asset_type="COLLATERAL")
+        cond = client.get_balance_allowance(asset_type="CONDITIONAL")
         result["client_ok"] = True
-        result["funder"] = getattr(client, "funder", None) or result["funder"]
         collat = client.get_balance_allowance(asset_type="COLLATERAL")
         cond = client.get_balance_allowance(asset_type="CONDITIONAL")
         if isinstance(collat, dict):
@@ -131,20 +160,44 @@ def _fetch_profile_bundle(address: str) -> Dict[str, Any]:
     return bundle
 
 
+def _load_local_live_activity() -> Dict[str, pd.DataFrame]:
+    base_dir = Path(__file__).resolve().parent.parent
+    logs_dir = base_dir / "logs"
+    orders_path = logs_dir / "live_orders.csv"
+    fills_path = logs_dir / "live_fills.csv"
+
+    def safe_read(path: Path) -> pd.DataFrame:
+        if not path.exists():
+            return pd.DataFrame()
+        try:
+            return pd.read_csv(path, engine="python", on_bad_lines="skip")
+        except Exception:
+            return pd.DataFrame()
+
+    return {
+        "orders": safe_read(orders_path),
+        "fills": safe_read(fills_path),
+    }
+
+
 def _render_top_status(live_state: Dict[str, Any], address: Optional[str], bundle: Optional[Dict[str, Any]]) -> None:
     status_bits: List[str] = []
     if live_state.get("live_mode"):
         if live_state.get("client_ok"):
-            status_bits.append("✅ live trading client connected")
+            status_bits.append("✅ live client connected (real API call succeeded)")
         elif live_state.get("client_error"):
-            status_bits.append("❌ live trading client failed")
+            status_bits.append("❌ live client failed")
         else:
             status_bits.append("⚪ live mode active")
     else:
         status_bits.append("ℹ️ paper mode")
 
+    address_source = live_state.get("address_source", "missing")
     if address:
-        status_bits.append("✅ wallet address available")
+        if address_source == "client_funder":
+            status_bits.append("✅ wallet address from live client")
+        else:
+            status_bits.append(f"⚠️ wallet address fallback ({address_source})")
     else:
         status_bits.append("❌ wallet address missing")
 
@@ -158,7 +211,10 @@ def _render_top_status(live_state: Dict[str, Any], address: Optional[str], bundl
         if bundle.get("activity"):
             status_bits.append("✅ recent activity fetched")
 
-    st.success(" | ".join(status_bits))
+    if live_state.get("client_ok"):
+        st.success(" | ".join(status_bits))
+    else:
+        st.warning(" | ".join(status_bits))
 
 
 def main() -> None:
@@ -166,12 +222,17 @@ def main() -> None:
     st.caption("Use this page to visually confirm that your wallet/profile data is reachable after setup and auth.")
 
     live_state = _read_live_client_state()
-    default_address = live_state.get("funder") or _get_candidate_address() or ""
+    local_activity = _load_local_live_activity()
+    default_address = live_state.get("funder") or ""
+
+    if not live_state.get("live_mode"):
+        st.error("Live mode is not active. Set TRADING_MODE=live and restart the dashboard.")
+        return
 
     address = st.text_input(
         "Wallet / profile address",
         value=default_address,
-        help="Uses POLYMARKET_PUBLIC_ADDRESS first, then POLYMARKET_FUNDER, then the live client funder when available.",
+        help="Strict mode: connection status is based on real live client calls. Address may still come from client/env/derived fallback and is labeled below.",
     ).strip()
 
     bundle = None
@@ -185,6 +246,10 @@ def main() -> None:
     c2.metric("Wallet address", address if address else "missing")
     c3.metric("Collateral balance", f"${live_state['collateral_balance']:.2f}" if live_state.get("collateral_balance") is not None else "N/A")
     c4.metric("Collateral allowance", f"{live_state['collateral_allowance']:.2f}" if live_state.get("collateral_allowance") is not None else "N/A")
+
+    lc1, lc2 = st.columns(2)
+    lc1.metric("Local live orders", len(local_activity.get("orders", pd.DataFrame())))
+    lc2.metric("Local live fills", len(local_activity.get("fills", pd.DataFrame())))
 
     if live_state.get("conditional_allowance") is not None:
         st.caption(f"Conditional allowance: {live_state['conditional_allowance']:.2f}")
