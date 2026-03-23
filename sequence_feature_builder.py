@@ -52,7 +52,7 @@ class SequenceFeatureBuilder:
                 for lag in lags:
                     group[f"{col}_lag_{lag}"] = group[col].shift(lag)
             if "trader_wallet" in group.columns:
-                group["recent_wallet_activity_5"] = group["trader_wallet"].rolling(5).count()
+                group["recent_token_activity_5"] = group["trader_wallet"].rolling(5).count()
             if "side" in group.columns:
                 group["recent_yes_ratio_5"] = (group["side"].astype(str).str.upper() == "YES").rolling(5).mean()
             parts.append(group)
