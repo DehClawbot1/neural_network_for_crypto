@@ -35,10 +35,11 @@ class HistoricalDatasetBuilder:
         wallet_alpha_history_df = self._safe_read("wallet_alpha_history.csv")
         btc_targets_df = self._safe_read("btc_targets.csv")
 
-        if signals_df.empty:
+        source_df = raw_candidates_df if not raw_candidates_df.empty else signals_df
+        if source_df.empty:
             return pd.DataFrame()
 
-        dataset = signals_df.copy()
+        dataset = source_df.copy()
 
         rename_map = {
             "market": "market_title",

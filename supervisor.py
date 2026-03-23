@@ -308,6 +308,7 @@ def main_loop():
             inferred_df = hybrid_scorer.run(inferred_df)
             if "hybrid_edge" in inferred_df.columns:
                 inferred_df["edge_score"] = inferred_df["hybrid_edge"]
+            log_raw_candidates(inferred_df)
             scored_df = signal_engine.score_features(inferred_df)
 
             if scored_df.empty:
@@ -416,6 +417,21 @@ def main_loop():
             autonomous_monitor.write_heartbeat("retrainer", status="ok", message="retrain_checked")
 
             logging.info("Cycle complete. Sleeping for 60 seconds...")
+            time.sleep(60)
+
+        except KeyboardInterrupt:
+            logging.info("Supervisor halted manually by user.")
+            break
+        except Exception as e:
+            autonomous_monitor.write_failure("supervisor", str(e))
+            logging.error(f"Critical error in main loop: {e}. Auto-restarting in 60 seconds...")
+            time.sleep(60)
+
+
+if __name__ == "__main__":
+    main_loop()
+
+onds...")
             time.sleep(60)
 
         except KeyboardInterrupt:
