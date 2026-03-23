@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import logging
 
 
 @dataclass
@@ -10,10 +11,11 @@ class RiskDecision:
 
 class LiveRiskManager:
     """
-    Live-test pre-trade and operational risk controls.
+    Live-test pre-trade and operational risk controls with optional DB logging.
     """
 
-    def __init__(self, max_position_size=100.0, max_open_orders=10, max_daily_loss=200.0, max_spread=0.05, cooldown_after_loss_minutes=15, max_failed_orders=3):
+    def __init__(self, db=None, max_position_size=100.0, max_open_orders=10, max_daily_loss=200.0, max_spread=0.05, cooldown_after_loss_minutes=15, max_failed_orders=3):
+        self.db = db
         self.max_position_size = max_position_size
         self.max_open_orders = max_open_orders
         self.max_daily_loss = max_daily_loss
@@ -24,7 +26,7 @@ class LiveRiskManager:
         self.failed_orders = 0
         self.kill_switch = False
 
-    def pre_trade_check(self, price, size, spread=None, open_orders=0, daily_pnl=0.0):
+    def _evaluate(self, price, size, spread=None, open_orders=0, daily_pnl=0.0):
         if self.kill_switch:
             return RiskDecision(False, "kill_switch_enabled")
         if float(size) > self.max_position_size:
@@ -40,6 +42,19 @@ class LiveRiskManager:
         if self.failed_orders >= self.max_failed_orders:
             return RiskDecision(False, "circuit_breaker_failed_orders")
         return RiskDecision(True, "ok")
+
+    def pre_trade_check(self, token_id=None, price=0.0, size=0.0, spread=None, open_orders=0, daily_pnl=0.0):
+        decision = self._evaluate(price=price, size=size, spread=spread, open_orders=open_orders, daily_pnl=daily_pnl)
+        if not decision.allowed and self.db is not None:
+            try:
+                detail = f"price={price}, size={size}, spread={spread}, daily_pnl={daily_pnl}"
+                self.db.execute(
+                    "INSERT INTO risk_events (token_id, event_type, detail) VALUES (?, ?, ?)",
+                    (str(token_id) if token_id is not None else None, decision.reason, detail),
+                )
+            except Exception as exc:
+                logging.error("Failed to log risk event to DB: %s", exc)
+        return decision
 
     def record_failed_order(self):
         self.failed_orders += 1

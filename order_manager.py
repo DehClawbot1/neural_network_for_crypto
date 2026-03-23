@@ -21,8 +21,8 @@ class OrderManager:
         self.orders_file = self.logs_dir / "live_orders.csv"
         self.fills_file = self.logs_dir / "live_fills.csv"
         self.client = ExecutionClient()
-        self.risk = LiveRiskManager()
         self.db = Database(self.logs_dir / "trading.db")
+        self.risk = LiveRiskManager(db=self.db)
 
     def _append(self, path: Path, row: dict):
         pd.DataFrame([row]).to_csv(path, mode="a", header=not path.exists(), index=False)
@@ -34,7 +34,7 @@ class OrderManager:
             return None
 
     def submit_entry(self, token_id, price, size, side="BUY", condition_id=None, outcome_side=None, spread=None, open_orders=0, daily_pnl=0.0, order_type="GTC", post_only=False, execution_style="maker"):
-        decision = self.risk.pre_trade_check(price=price, size=size, spread=spread, open_orders=open_orders, daily_pnl=daily_pnl)
+        decision = self.risk.pre_trade_check(token_id=token_id, price=price, size=size, spread=spread, open_orders=open_orders, daily_pnl=daily_pnl)
         idempotency_key = f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M')}|{token_id}|{condition_id}|{side}|{size}|{round(float(price), 4)}"
         existing = self.list_orders()
         if not existing.empty and "idempotency_key" in existing.columns and (existing["idempotency_key"].astype(str) == idempotency_key).any():
