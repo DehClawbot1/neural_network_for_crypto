@@ -54,11 +54,16 @@ def ensure_optional_rl_model():
 def maybe_retrain_before_start():
     print("[2.5/4] Checking whether the model should retrain from accumulated data...")
     retrainer = Retrainer()
-    retrained = retrainer.maybe_retrain()
+    try:
+        retrained = retrainer.maybe_retrain()
+    except Exception as exc:
+        print(f"[!] Pre-start retraining failed but startup will continue: {exc}\n")
+        return False
     if retrained:
         print("[+] Retraining triggered before startup. Latest weights refreshed.\n")
     else:
         print("[+] No pre-start retraining needed yet.\n")
+    return retrained
 
 
 def build_research_artifacts():
