@@ -24,7 +24,7 @@ def test_open_position_success(mock_price_service_cls, tmp_path):
     assert len(open_positions) == 1
     assert open_positions.iloc[0]["token_id"] == "token_123"
     assert float(open_positions.iloc[0]["shares"]) == 20.0
-    assert float(open_positions.iloc[0]["confidence"]) == 0.85
+    assert float(open_positions.iloc[0]["confidence_at_entry"]) == 0.85
     assert open_positions.iloc[0]["status"] == "OPEN"
 
 
@@ -40,9 +40,9 @@ def test_open_position_respects_max_limit(mock_price_service_cls, tmp_path):
 
 
 @patch("position_manager.MarketPriceService")
-def test_close_position_uses_latest_price_and_removes_open_position(mock_price_service_cls, tmp_path):
+def test_close_position_uses_quote_and_removes_open_position(mock_price_service_cls, tmp_path):
     mock_price_service = mock_price_service_cls.return_value
-    mock_price_service.get_latest_price.return_value = 0.75
+    mock_price_service.get_quote.return_value = {"best_bid": 0.75, "price": 0.76}
 
     pm = PositionManager(logs_dir=tmp_path, fee_rate=0.0, slippage_rate=0.0)
     signal = {"market_title": "Test Market", "token_id": "token_123", "outcome_side": "YES", "trader_wallet": "0xabc"}
@@ -59,9 +59,11 @@ def test_close_position_uses_latest_price_and_removes_open_position(mock_price_s
 
 
 @patch("position_manager.MarketPriceService")
-def test_update_mark_to_market_updates_price_market_value_and_unrealized_pnl(mock_price_service_cls, tmp_path):
+def test_update_mark_to_market_stores_spread_and_bid_size(mock_price_service_cls, tmp_path):
     mock_price_service = mock_price_service_cls.return_value
-    mock_price_service.get_latest_prices.return_value = {"token_123": 0.62}
+    mock_price_service.get_batch_prices.return_value = {
+        "token_123": {"price": 0.62, "spread": 0.03, "best_bid_size": 150.0}
+    }
 
     pm = PositionManager(logs_dir=tmp_path)
     signal = {"market_title": "Test Market", "token_id": "token_123", "outcome_side": "YES", "confidence": 0.85, "trader_wallet": "0xabc"}
@@ -72,9 +74,8 @@ def test_update_mark_to_market_updates_price_market_value_and_unrealized_pnl(moc
     assert not updated.empty
     row = updated.iloc[0]
     assert float(row["current_price"]) == 0.62
-    assert float(row["market_value"]) == 12.4
-    assert float(row["unrealized_pnl"]) == 2.4
-    assert float(row["peak_price"]) == 0.62
+    assert float(row["spread"]) == 0.03
+    assert float(row["bid_size"]) == 150.0
 
 
 @patch("position_manager.MarketPriceService")

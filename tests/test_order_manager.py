@@ -14,6 +14,11 @@ class _FixedDateTime:
     def utcnow(cls):
         return datetime(2026, 3, 23, 12, 0, 0)
 
+    @classmethod
+    def now(cls, tz=None):
+        base = datetime(2026, 3, 23, 12, 0, 0)
+        return base.replace(tzinfo=tz) if tz is not None else base
+
 
 class TestOrderManager(unittest.TestCase):
     def setUp(self):
