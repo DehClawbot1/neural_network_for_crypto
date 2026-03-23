@@ -42,7 +42,13 @@ class ExecutionClient:
         if self.api_key and self.api_secret and self.api_passphrase:
             self.api_creds = self.ApiCreds(self.api_key, self.api_secret, self.api_passphrase)
         else:
-            temp_client = self.ClobClient(self.host, key=self.private_key, chain_id=self.chain_id)
+            temp_client = self.ClobClient(
+                self.host,
+                key=self.private_key,
+                chain_id=self.chain_id,
+                signature_type=self.signature_type,
+                funder=self.funder,
+            )
             self.api_creds = temp_client.create_or_derive_api_creds()
             print(
                 "SAVE THESE TO .ENV:\n"
