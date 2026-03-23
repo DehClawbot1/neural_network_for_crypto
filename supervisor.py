@@ -30,6 +30,7 @@ from stage2_temporal_inference import Stage2TemporalInference
 from stage3_hybrid import Stage3HybridScorer
 from strategy_layers import EntryRuleLayer
 from shadow_purgatory import ShadowPurgatory
+from db import Database
 
 # Configure logging for zero-intervention monitoring
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -292,6 +293,7 @@ def main_loop():
     except Exception as exc:
         shadow_purgatory = None
         logging.warning("ShadowPurgatory unavailable at startup: %s", exc)
+    db = Database()
 
     while True:
         try:
@@ -350,6 +352,28 @@ def main_loop():
                 inferred_df["edge_score"] = inferred_df["hybrid_edge"]
             log_raw_candidates(inferred_df)
             scored_df = signal_engine.score_features(inferred_df)
+
+            if not scored_df.empty:
+                for _, decision_row in scored_df.iterrows():
+                    row_dict = decision_row.to_dict()
+                    score = None
+                    for key in ["meta_prob", "hybrid_prob", "p_tp_before_sl", "confidence", "edge_score"]:
+                        value = row_dict.get(key)
+                        if value is not None and pd.notna(value):
+                            score = float(value)
+                            break
+                    try:
+                        db.execute(
+                            "INSERT INTO model_decisions (token_id, model_name, score, action) VALUES (?, ?, ?, ?)",
+                            (
+                                str(row_dict.get("token_id")) if row_dict.get("token_id") is not None else None,
+                                "stage3_hybrid",
+                                score,
+                                str(row_dict.get("signal_label", row_dict.get("entry_intent", "scored"))),
+                            ),
+                        )
+                    except Exception as exc:
+                        logging.warning("Model decision logging failed for %s: %s", row_dict.get("token_id"), exc)
 
             if shadow_purgatory is not None and not scored_df.empty:
                 for _, row in scored_df.head(5).iterrows():
