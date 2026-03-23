@@ -50,16 +50,12 @@ def ensure_live_client_ready():
     try:
         client = ExecutionClient()
         collateral = client.get_balance_allowance(asset_type="COLLATERAL")
-        conditional = client.get_balance_allowance(asset_type="CONDITIONAL")
         if not isinstance(collateral, dict):
             print("[!] Live client failed: collateral balance payload missing or invalid.\n")
             return False
         balance = collateral.get("balance", collateral.get("amount", collateral.get("available_balance")))
         print(f"[+] Live client connected. Collateral balance payload received: {balance}")
-        if isinstance(conditional, dict) and conditional.get("allowance") is not None:
-            print(f"[+] Conditional allowance payload received: {conditional.get('allowance')}\n")
-        else:
-            print("[+] Conditional allowance check completed.\n")
+        print(f"[+] Credential source in use: {getattr(client, 'credential_source', 'unknown')}\n")
         return True
     except Exception as exc:
         print(f"[!] Live client verification failed: {exc}\n")
