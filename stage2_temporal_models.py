@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.utils import resample
@@ -50,6 +51,19 @@ class Stage2TemporalModels:
         balanced = pd.concat([majority_df, minority_upsampled], ignore_index=True)
         return balanced.sample(frac=1.0, random_state=42).reset_index(drop=True)
 
+    def _stationarize_features(self, df, feature_cols):
+        out = df.copy()
+        price_cols = [c for c in feature_cols if "price" in c.lower()]
+        for col in price_cols:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+            out[col] = np.log1p(out[col].clip(lower=0))
+        for prefix in ["volume", "liquidity"]:
+            cols = [c for c in feature_cols if prefix in c.lower()]
+            for col in cols:
+                series = pd.to_numeric(out[col], errors="coerce")
+                out[col] = (series - series.mean()) / (series.std(ddof=0) + 1e-9)
+        return out
+
     def train(self):
         df = self._safe_read()
         if df.empty:
@@ -65,6 +79,7 @@ class Stage2TemporalModels:
         if not feature_cols:
             return pd.DataFrame()
 
+        df = self._stationarize_features(df, feature_cols)
         metrics = {}
         n_splits = min(5, max(2, len(df) // 50))
         tscv = TimeSeriesSplit(n_splits=n_splits)
