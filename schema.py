@@ -9,6 +9,7 @@ CANONICAL = {
     "timestamp_col": "timestamp",
     "price_col": "entry_price",
     "return_target_col": "forward_return_15m",
+    "btc_return_target_col": "future_return",
     "classification_target_col": "tp_before_sl_60m",
 }
 
@@ -23,7 +24,8 @@ ALIASES = {
     "entry_intent": ["entry_intent"],
     "timestamp": ["timestamp", "updated_at", "created_at"],
     "entry_price": ["entry_price"],
-    "forward_return_15m": ["forward_return_15m", "future_return"],
+    "forward_return_15m": ["forward_return_15m"],
+    "future_return": ["future_return"],
     "tp_before_sl_60m": ["tp_before_sl_60m", "tp_hit_before_sl"],
 }
 
