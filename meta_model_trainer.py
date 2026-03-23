@@ -13,6 +13,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 class MetaModelTrainer:
+    @staticmethod
+    def _sanitize_sequence_data(df):
+        targets_to_kill = [c for c in df.columns if 'tp_hit' in c or 'forward_return' in c or 'sl_hit' in c]
+        if 'tp_before_sl_60m' in targets_to_kill:
+            targets_to_kill.remove('tp_before_sl_60m')
+        df = df.drop(columns=[c for c in targets_to_kill if c in df.columns], errors='ignore')
+        cols_to_drop = [c for c in df.columns if c.endswith('_y')]
+        df = df.drop(columns=cols_to_drop, errors='ignore')
+        df.columns = [c[:-2] if c.endswith('_x') else c for c in df.columns]
+        df = df.loc[:, ~df.columns.duplicated()]
+        return df
+
     def __init__(self, data_path="logs/sequence_dataset.csv", model_dir="weights"):
         self.data_path = Path(data_path)
         self.model_dir = Path(model_dir)
@@ -31,6 +43,7 @@ class MetaModelTrainer:
             raise FileNotFoundError(f"Dataset missing at {self.data_path}")
 
         df = pd.read_csv(self.data_path, engine="python", on_bad_lines="skip")
+        df = self._sanitize_sequence_data(df)
         if df.empty or self.target not in df.columns:
             raise ValueError("Sequence dataset is empty or missing target column.")
 
