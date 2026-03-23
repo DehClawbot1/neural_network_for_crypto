@@ -108,7 +108,7 @@ def apply_dashboard_filters(df, market_search="", wallet_search="", min_confiden
     if only_actionable and "signal_label" in out.columns:
         out = out[~out["signal_label"].astype(str).str.upper().isin(["IGNORE", "NO_ACTION"])]
     if time_range_hours is not None:
-        for col in ["timestamp", "created_at", "updated_at", "opened_at"]:
+        for col in ["timestamp", "closed_at", "updated_at", "opened_at", "created_at"]:
             if col in out.columns:
                 ts = pd.to_datetime(out[col], errors="coerce", utc=True)
                 cutoff = pd.Timestamp.utcnow() - pd.Timedelta(hours=float(time_range_hours))
