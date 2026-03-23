@@ -59,3 +59,22 @@ def test_wait_for_fill_persists_fill(mock_execution_client, tmp_path):
     db_rows = manager.db.query_all("SELECT order_id, token_id FROM fills WHERE order_id = ?", ("test-order-123",))
     assert db_rows
     assert db_rows[0]["token_id"] == "0x123"
+
+
+def test_automated_exit_trigger(mock_execution_client, tmp_path):
+    manager = _build_manager(tmp_path)
+
+    with patch("market_price_service.MarketPriceService.get_quote", return_value={"best_bid": 0.75}):
+        manager.submit_entry = MagicMock(return_value=({"status": "SUBMITTED"}, {}))
+
+        manager.monitor_and_trigger_exit(
+            token_id="tok-1",
+            target_price=0.70,
+            size=10,
+            condition_id="cond-1",
+        )
+
+    manager.submit_entry.assert_called_once()
+    _, kwargs = manager.submit_entry.call_args
+    assert kwargs["side"] == "SELL"
+    assert kwargs["price"] == 0.75
