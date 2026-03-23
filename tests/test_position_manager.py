@@ -95,3 +95,27 @@ def test_apply_exit_rules_closes_on_confidence_drop(mock_price_service_cls, tmp_
     assert not closed.empty
     assert closed.iloc[0]["status"] == "CLOSED"
     assert closed.iloc[0]["close_reason"] == "confidence_drop"
+
+
+@patch("position_manager.MarketPriceService")
+def test_position_hold_and_exit_rules(mock_price_service_cls, tmp_path):
+    mock_price_service = mock_price_service_cls.return_value
+    pm = PositionManager(logs_dir=tmp_path, take_profit_roi_pct=0.10, fee_rate=0.0, slippage_rate=0.0)
+    signal = {"token_id": "tok-1", "market": "BTC Test", "outcome_side": "YES", "trader_wallet": "0xwhale"}
+
+    assert pm.open_position(signal, size_usdc=100.0, fill_price=0.5) is True
+
+    mock_price_service.get_batch_prices.return_value = {"tok-1": {"price": 0.5}}
+    pm.update_mark_to_market()
+
+    open_pos = pm.get_open_positions()
+    assert float(open_pos.iloc[0]["unrealized_pnl"]) == 0.0
+
+    mock_price_service.get_batch_prices.return_value = {"tok-1": {"price": 0.6}}
+    pm.update_mark_to_market()
+
+    closed = pm.apply_exit_rules()
+
+    assert len(closed) == 1
+    assert closed.iloc[0]["close_reason"] == "take_profit_roi"
+    assert pm.get_open_positions().empty
