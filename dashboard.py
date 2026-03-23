@@ -43,6 +43,7 @@ SUPERVISED_EVAL_FILE = LOGS_DIR / "supervised_eval.csv"
 TIME_SPLIT_EVAL_FILE = LOGS_DIR / "time_split_eval.csv"
 PATH_REPLAY_FILE = LOGS_DIR / "path_replay_backtest.csv"
 BACKTEST_BY_WALLET_FILE = LOGS_DIR / "backtest_by_wallet.csv"
+SHADOW_RESULTS_FILE = LOGS_DIR / "shadow_results.csv"
 MODEL_REGISTRY_FILE = BASE_DIR / "weights" / "model_registry.csv"
 
 st.set_page_config(page_title="Neural Network for Crypto", page_icon="📈", layout="wide")
@@ -244,6 +245,42 @@ def render_attention_needed(signals_df, trades_df, alerts_df, positions_df, mode
             st.warning(item)
     else:
         st.success("No immediate incidents detected.")
+
+
+def render_shadow_execution(shadow_df):
+    st.markdown('<div class="section-title">Shadow Execution</div>', unsafe_allow_html=True)
+    st.caption("Shadow intents, slippage tax, DOA vetoes, and realized post-signal outcomes.")
+    if shadow_df is None or shadow_df.empty:
+        st.info("No shadow execution data yet.")
+        return
+
+    df = shadow_df.copy()
+    resolved = df[df["outcome"] != "PENDING"] if "outcome" in df.columns else pd.DataFrame()
+    doa = df[df["outcome"] == "DOA"] if "outcome" in df.columns else pd.DataFrame()
+
+    avg_slip = float(pd.to_numeric(df.get("entry_slippage_bps"), errors="coerce").dropna().mean()) if "entry_slippage_bps" in df.columns else 0.0
+    avg_ev_adj = float(pd.to_numeric(df.get("ev_adj"), errors="coerce").dropna().mean()) if "ev_adj" in df.columns else 0.0
+    avg_meta = float(pd.to_numeric(df.get("meta_prob"), errors="coerce").dropna().mean()) if "meta_prob" in df.columns else 0.0
+    tp_rate = float((resolved["outcome"].astype(str) == "TP").mean()) if not resolved.empty and "outcome" in resolved.columns else 0.0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Shadow Intents", len(df))
+    c2.metric("Resolved", len(resolved))
+    c3.metric("DOA / Vetoed", len(doa))
+    c4.metric("TP Rate (resolved)", f"{tp_rate:.1%}")
+
+    c5, c6, c7 = st.columns(3)
+    c5.metric("Avg Slippage (bps)", f"{avg_slip:.1f}")
+    c6.metric("Avg EV_adj", f"{avg_ev_adj:+.2%}")
+    c7.metric("Avg Meta Prob", f"{avg_meta:.2%}")
+
+    if "outcome" in df.columns:
+        outcome_mix = df["outcome"].astype(str).value_counts().reset_index()
+        outcome_mix.columns = ["outcome", "count"]
+        st.plotly_chart(px.bar(outcome_mix, x="outcome", y="count", title="Shadow Outcome Mix"), use_container_width=True)
+
+    plot_cols = [c for c in ["timestamp", "market_title", "market", "meta_prob", "entry_slippage_bps", "expected_slip_bps", "ev_adj", "outcome", "realized_return", "trades_in_window"] if c in df.columns]
+    st.dataframe(df[plot_cols].tail(100), use_container_width=True, hide_index=True)
 
 
 def render_header():
@@ -1482,6 +1519,7 @@ def main():
     path_replay_df = normalize_dataframe_columns(load_csv(PATH_REPLAY_FILE))
     backtest_wallet_df = normalize_dataframe_columns(load_csv(BACKTEST_BY_WALLET_FILE))
     model_registry_df = normalize_dataframe_columns(load_csv(MODEL_REGISTRY_FILE))
+    shadow_results_df = normalize_dataframe_columns(load_csv(SHADOW_RESULTS_FILE))
 
     signals_df = apply_dashboard_filters(signals_df, market_search=market_search, wallet_search=wallet_search, min_confidence=min_confidence, signal_label=signal_label_filter, side_filter=side_filter, min_edge_score=min_edge_score, only_actionable=only_actionable, time_range_hours=time_range_hours)
     trades_df = apply_dashboard_filters(trades_df, market_search=market_search, wallet_search=wallet_search, min_confidence=min_confidence, signal_label=signal_label_filter, side_filter=side_filter, min_edge_score=min_edge_score, only_actionable=only_actionable, time_range_hours=time_range_hours)
@@ -1511,9 +1549,9 @@ def main():
         st.caption(f"Alerts file: {ALERTS_FILE}")
         st.caption(f"System health file: {SYSTEM_HEALTH_FILE}")
 
-    st.caption("Quick guide: System Status = health and performance, Signals = ranked opportunities, Positions = paper trade state and PnL, Markets = market, whale, and alert context, Models = learning outputs and raw data.")
+    st.caption("Quick guide: System Status = health and performance, Signals = ranked opportunities, Positions = paper trade state and PnL, Markets = market, whale, and alert context, Models = learning outputs and raw data, Shadow Audit = slippage / DOA / execution-tax monitoring.")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["System Status", "Signals & Opportunities", "Positions & PnL", "Markets, Whales & Alerts", "Models & Data Quality"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["System Status", "Signals & Opportunities", "Positions & PnL", "Markets, Whales & Alerts", "Models & Data Quality", "Shadow Audit"])
 
     with tab1:
         render_overview(signals_df, trades_df, markets_df, alerts_df, positions_df, closed_positions_df)
@@ -1573,6 +1611,9 @@ def main():
             if show_debug_sections:
                 with st.expander("Debug / Raw Logs"):
                     render_raw_data(signals_df, trades_df, episode_log_df, markets_df, whales_df, alerts_df, model_status_df, positions_df, closed_positions_df)
+
+    with tab6:
+        render_shadow_execution(shadow_results_df)
 
 
 if __name__ == "__main__":
