@@ -9,6 +9,8 @@ import joblib
 import pandas as pd
 import requests
 
+from config import TradingConfig
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] ShadowPurgatory: %(message)s")
 
 
@@ -92,8 +94,8 @@ class ShadowPurgatory:
             meta_prob = float(self.model.predict_proba(X)[:, 1][0])
             expected_slip_bps = self._get_bucket_slippage(meta_prob)
             expected_slip_pct = expected_slip_bps / 10000.0
-            ev_adj = (meta_prob * 0.04) + ((1 - meta_prob) * -0.03) - expected_slip_pct
-            is_doa = ev_adj < 0.005
+            ev_adj = (meta_prob * TradingConfig.SHADOW_TP_DELTA) + ((1 - meta_prob) * -TradingConfig.SHADOW_SL_DELTA) - expected_slip_pct
+            is_doa = ev_adj < TradingConfig.VETO_EV_THRESHOLD
 
             token_id = signal.get("token_id")
             if not token_id:
@@ -148,7 +150,7 @@ class ShadowPurgatory:
                 start_dt = datetime.fromisoformat(str(row["timestamp"]).replace("Z", "+00:00"))
             except Exception:
                 continue
-            if datetime.now(timezone.utc) - start_dt > timedelta(minutes=61):
+            if datetime.now(timezone.utc) - start_dt > timedelta(minutes=TradingConfig.SHADOW_WINDOW_MINUTES + 1):
                 outcome, ret, count = self._check_path(row)
                 if outcome != "PENDING":
                     updates[idx] = (outcome, ret, count)
@@ -165,9 +167,10 @@ class ShadowPurgatory:
 
     def _check_path(self, row):
         start_ts = int(datetime.fromisoformat(str(row["timestamp"]).replace("Z", "+00:00")).timestamp())
-        end_ts = start_ts + 3600
+        end_ts = start_ts + (TradingConfig.SHADOW_WINDOW_MINUTES * 60)
         entry_p = float(row["shadow_entry_price"])
-        tp, sl = entry_p + 0.04, entry_p - 0.03
+        tp = entry_p + TradingConfig.SHADOW_TP_DELTA
+        sl = entry_p - TradingConfig.SHADOW_SL_DELTA
         trades = self.clob.get_trades_with_retry(row["token_id"], start_ts, limit=1000)
         if trades is None:
             return "PENDING", 0.0, 0
@@ -184,9 +187,9 @@ class ShadowPurgatory:
             last_p = p
             count += 1
             if p >= tp:
-                return "TP", 0.04, count
+                return "TP", TradingConfig.SHADOW_TP_DELTA, count
             if p <= sl:
-                return "SL", -0.03, count
+                return "SL", -TradingConfig.SHADOW_SL_DELTA, count
         return "EXPIRED", round(last_p - entry_p, 4), count
 
     def _get_reachable_price(self, token_id, signal_ts):

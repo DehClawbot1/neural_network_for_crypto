@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import scipy.stats as stats
 
+from config import TradingConfig
+
 
 def run_impact_correlation(df):
     resolved = df[df['outcome'] != "PENDING"].copy()
@@ -45,7 +47,7 @@ def run_execution_audit(log_path="logs/shadow_results.csv", limit=20):
     resolved["slippage_pct"] = resolved["entry_slippage_bps"].fillna(0) / 10000
     resolved["theoretical_return"] = resolved["realized_return"].fillna(0) + resolved["slippage_pct"]
 
-    theoretical_win_rate = (resolved["theoretical_return"] >= 0.04).mean()
+    theoretical_win_rate = (resolved["theoretical_return"] >= TradingConfig.SHADOW_TP_DELTA).mean()
     actual_win_rate = (resolved["outcome"] == "TP").mean()
 
     avg_slippage = resolved["entry_slippage_bps"].mean() if "entry_slippage_bps" in resolved.columns else 0.0
