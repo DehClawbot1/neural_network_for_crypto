@@ -1,5 +1,7 @@
 import os
+import sys
 import logging
+import subprocess
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -87,6 +89,11 @@ def validate_environment():
 if __name__ == "__main__":
     is_valid = validate_environment()
     if is_valid:
-        print("\n[+] Environment is valid. You may start run_bot.py.")
+        print("\n[+] Environment is valid.")
+        start_now = input("Start run_bot.py now? [y/N]: ").strip().lower()
+        if start_now in {"y", "yes"}:
+            subprocess.run([sys.executable, "run_bot.py"], check=False)
+        else:
+            print("[+] Setup complete. You may start run_bot.py manually.")
     else:
         print("\n[-] Validation failed or template generated. Please check your .env file and run again.")
