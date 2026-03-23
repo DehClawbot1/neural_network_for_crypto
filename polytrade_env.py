@@ -61,9 +61,11 @@ class PolyTradeEnv(gym.Env):
         if targets.empty or history.empty or "token_id" not in targets.columns:
             return []
 
+        history = history.copy()
+        history["price"] = pd.to_numeric(history.get("price"), errors="coerce").fillna(0.5)
         targets["timestamp"] = pd.to_datetime(targets["timestamp"], utc=True, errors="coerce")
         history["timestamp"] = pd.to_datetime(history["timestamp"], utc=True, errors="coerce")
-        history = history.sort_values(["token_id", "timestamp"]).reset_index(drop=True)
+        history = history.dropna(subset=["timestamp", "token_id"]).sort_values(["token_id", "timestamp"]).reset_index(drop=True)
 
         dataset = []
         for _, row in targets.iterrows():
@@ -74,7 +76,8 @@ class PolyTradeEnv(gym.Env):
             token_history = history[(history["token_id"].astype(str) == str(token_id)) & (history["timestamp"] >= ts)].head(self.max_hold_steps + 1)
             if len(token_history) < 2:
                 continue
-            dataset.append({"signal": row.to_dict(), "prices": token_history["price"].astype(float).tolist()})
+            clean_row = row.fillna(0.0).to_dict()
+            dataset.append({"signal": clean_row, "prices": token_history["price"].tolist()})
         return dataset
 
     def _current_price(self):
@@ -90,13 +93,23 @@ class PolyTradeEnv(gym.Env):
 
     def _build_state(self):
         row = self.episode_row or {}
-        price = self._current_price()
+
+        def safe_float(key, default=0.0):
+            val = row.get(key, default)
+            if pd.isna(val):
+                return float(default)
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return float(default)
+
+        price = float(np.nan_to_num(self._current_price(), nan=0.5))
         position_value = self._position_value(price)
         unrealized = position_value - (self.shares * self.entry_price if self.position_open else 0.0)
-        spread = float(row.get("spread", 0.0) or 0.0)
-        realized_vol = float(row.get("btc_realized_vol_15m", row.get("volatility_score", 0.0)) or 0.0)
-        time_to_close = float(row.get("time_to_close_minutes", 0.0) or 0.0)
-        liquidity = float(row.get("liquidity_score", 0.0) or 0.0)
+        spread = safe_float("spread", 0.0)
+        realized_vol = safe_float("btc_realized_vol_15m", safe_float("volatility_score", 0.0))
+        time_to_close = safe_float("time_to_close_minutes", 0.0)
+        liquidity = safe_float("liquidity_score", 0.0)
         drawdown = min(0.0, unrealized)
         state = np.array(
             [
@@ -104,17 +117,17 @@ class PolyTradeEnv(gym.Env):
                 float(self.entry_price if self.position_open else price),
                 float(self.inventory_fraction),
                 float(self.shares),
-                float(row.get("confidence", 0.0) or 0.0),
-                float(row.get("edge_score", 0.0) or 0.0),
+                safe_float("confidence", 0.0),
+                safe_float("edge_score", 0.0),
                 float(realized_vol),
                 float(self.position_age / max(1, self.max_hold_steps)),
-                float(drawdown),
+                float(np.nan_to_num(drawdown, nan=0.0)),
                 float(spread + liquidity + (time_to_close / max(1.0, time_to_close + 1.0))),
             ],
             dtype=np.float32,
         )
-        self.state = state
-        return state
+        self.state = np.clip(np.nan_to_num(state, nan=0.0, posinf=10.0, neginf=-10.0), -10.0, 10.0)
+        return self.state
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
