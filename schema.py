@@ -23,7 +23,7 @@ ALIASES = {
     "outcome_side": ["outcome_side", "side"],
     "entry_intent": ["entry_intent"],
     "timestamp": ["timestamp", "updated_at", "created_at"],
-    "entry_price": ["entry_price"],
+    "entry_price": ["entry_price", "price"],
     "forward_return_15m": ["forward_return_15m"],
     "future_return": ["future_return"],
     "tp_before_sl_60m": ["tp_before_sl_60m", "tp_hit_before_sl"],
