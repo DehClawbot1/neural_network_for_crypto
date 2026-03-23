@@ -268,8 +268,7 @@ def render_header():
         unsafe_allow_html=True,
     )
     st.info(
-        "This interface shows ranked paper-trading opportunities, public market tracking, whale activity, and alerts only. "
-        "It does not place real bets or connect to a live account."
+        "This interface tracks public markets and alerts. In LIVE mode, it connects to your Polymarket account to fetch balances and execute orders."
     )
 
 
