@@ -41,8 +41,13 @@ class FeatureBuilder:
         sizes = prior.get("sizes", [])
         sizes.append(_safe_float(trade_row.get(size_col, 0.0), 0.0))
         forward_returns = prior.get("forward_returns", [])
-        if "future_return" in trade_row and pd.notna(trade_row.get("future_return")):
-            forward_returns.append(_safe_float(trade_row.get("future_return"), 0.0))
+        return_value = None
+        if "forward_return_15m" in trade_row and pd.notna(trade_row.get("forward_return_15m")):
+            return_value = trade_row.get("forward_return_15m")
+        elif "future_return" in trade_row and pd.notna(trade_row.get("future_return")):
+            return_value = trade_row.get("future_return")
+        if return_value is not None:
+            forward_returns.append(_safe_float(return_value, 0.0))
         tp_labels = prior.get("tp_labels", [])
         if "tp_before_sl_60m" in trade_row and pd.notna(trade_row.get("tp_before_sl_60m")):
             tp_labels.append(int(trade_row.get("tp_before_sl_60m")))
