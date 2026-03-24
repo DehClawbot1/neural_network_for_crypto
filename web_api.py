@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI
+
+from web_api_polymarket import router as polymarket_router
 from fastapi.responses import JSONResponse
 from log_loader import load_execution_history
 
