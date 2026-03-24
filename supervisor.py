@@ -563,7 +563,38 @@ def main_loop():
 
             alerts_df = safe_read_csv("logs/alerts.csv")
             position_manager.update_mark_to_market(scored_df)
-            if trading_mode != "live":
+            open_positions_df = position_manager.get_open_positions()
+            if trading_mode == "live" and order_manager is not None and not open_positions_df.empty:
+                logging.info("Checking live exit rules for %s positions...", len(open_positions_df))
+                for _, pos_row in open_positions_df.iterrows():
+                    pos_dict = pos_row.to_dict()
+                    token_id = str(pos_dict.get("token_id", "") or "")
+                    exit_reason = position_manager.get_exit_reason(pos_dict, alerts_df=alerts_df)
+                    if not exit_reason:
+                        continue
+                    logging.info("Live exit rule triggered for %s: %s", token_id, exit_reason)
+                    exit_price = quote_exit_price(pos_dict)
+                    exit_size = float(pos_dict.get("shares", 0.0) or 0.0)
+                    if exit_price <= 0 or exit_size <= 0:
+                        logging.warning("Live exit skipped for %s due to invalid exit price/size", token_id)
+                        continue
+                    exit_row, exit_response = order_manager.submit_entry(
+                        token_id=token_id,
+                        price=exit_price,
+                        size=exit_size,
+                        side="SELL",
+                        condition_id=pos_dict.get("condition_id"),
+                        outcome_side=pos_dict.get("outcome_side"),
+                        execution_style="taker",
+                    )
+                    exit_order_id = (exit_row or {}).get("order_id") or (exit_response or {}).get("orderID") or (exit_response or {}).get("order_id") or (exit_response or {}).get("id")
+                    if not exit_order_id:
+                        logging.info("Live exit rejected/skipped for token_id=%s reason=%s", token_id, (exit_row or {}).get("reason"))
+                        continue
+                    fill_result = order_manager.wait_for_fill(exit_order_id)
+                    if fill_result.get("filled"):
+                        position_manager.close_position(pos_dict, reason=f"live_{exit_reason}")
+            else:
                 position_manager.apply_exit_rules(alerts_df)
             open_positions_df = position_manager.get_open_positions()
             autonomous_monitor.write_heartbeat("position_manager", status="ok", message="positions_updated", extra={"open_positions": len(open_positions_df) if open_positions_df is not None else 0})

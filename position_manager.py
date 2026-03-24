@@ -250,6 +250,41 @@ class PositionManager:
         closed_df.to_csv(self.episode_file, mode="a", header=not self.episode_file.exists(), index=False)
         return closed_df
 
+    def get_exit_reason(self, row: dict, alerts_df: pd.DataFrame | None = None):
+        confidence = float(row.get("confidence", 0.0))
+        market = str(row.get("market", ""))
+        entry_price = float(row.get("entry_price", 0.0) or 0.0)
+        current_price = float(row.get("current_price", entry_price) or entry_price)
+        peak_price = float(row.get("peak_price", entry_price) or entry_price)
+        roi_pct = ((current_price - entry_price) / entry_price) if entry_price else 0.0
+        trailing_floor = peak_price * (1.0 - self.trailing_stop_pct)
+        opened_at = pd.to_datetime(row.get("opened_at"), errors="coerce")
+        minutes_open = (pd.Timestamp.now() - opened_at).total_seconds() / 60.0 if pd.notna(opened_at) else 0.0
+        spread = float(row.get("spread", 0.0) or 0.0)
+        bid_size = float(row.get("bid_size", self.min_bid_size_to_exit) or self.min_bid_size_to_exit)
+
+        alert_markets = set()
+        if alerts_df is not None and not alerts_df.empty and "market" in alerts_df.columns:
+            alert_markets = set(alerts_df["market"].dropna().astype(str).tolist())
+
+        if (current_price - entry_price) >= self.take_profit_price_move:
+            return "take_profit_price_move"
+        if roi_pct >= self.take_profit_roi_pct:
+            return "take_profit_roi"
+        if peak_price > entry_price and current_price <= trailing_floor:
+            return "trailing_stop"
+        if minutes_open >= self.time_stop_minutes:
+            return "time_stop"
+        if spread > self.max_spread_to_exit:
+            return None
+        if bid_size < self.min_bid_size_to_exit:
+            return None
+        if confidence < 0.45:
+            return "confidence_drop"
+        if market in alert_markets:
+            return "market_alert"
+        return None
+
     def apply_exit_rules(self, alerts_df: pd.DataFrame | None = None):
         positions = self._read_positions()
         if positions.empty:
@@ -258,41 +293,8 @@ class PositionManager:
         closed = []
         remaining_rows = []
 
-        alert_markets = set()
-        if alerts_df is not None and not alerts_df.empty and "market" in alerts_df.columns:
-            alert_markets = set(alerts_df["market"].dropna().astype(str).tolist())
-
         for _, row in positions.iterrows():
-            confidence = float(row.get("confidence", 0.0))
-            pnl = float(row.get("unrealized_pnl", 0.0))
-            market = str(row.get("market", ""))
-            entry_price = float(row.get("entry_price", 0.0) or 0.0)
-            current_price = float(row.get("current_price", entry_price) or entry_price)
-            peak_price = float(row.get("peak_price", entry_price) or entry_price)
-            roi_pct = ((current_price - entry_price) / entry_price) if entry_price else 0.0
-            trailing_floor = peak_price * (1.0 - self.trailing_stop_pct)
-            opened_at = pd.to_datetime(row.get("opened_at"), errors="coerce")
-            minutes_open = (pd.Timestamp.now() - opened_at).total_seconds() / 60.0 if pd.notna(opened_at) else 0.0
-            spread = float(row.get("spread", 0.0) or 0.0)
-            bid_size = float(row.get("bid_size", self.min_bid_size_to_exit) or self.min_bid_size_to_exit)
-
-            close_reason = None
-            if (current_price - entry_price) >= self.take_profit_price_move:
-                close_reason = "take_profit_price_move"
-            elif roi_pct >= self.take_profit_roi_pct:
-                close_reason = "take_profit_roi"
-            elif peak_price > entry_price and current_price <= trailing_floor:
-                close_reason = "trailing_stop"
-            elif minutes_open >= self.time_stop_minutes:
-                close_reason = "time_stop"
-            elif spread > self.max_spread_to_exit:
-                close_reason = None
-            elif bid_size < self.min_bid_size_to_exit:
-                close_reason = None
-            elif confidence < 0.45:
-                close_reason = "confidence_drop"
-            elif market in alert_markets:
-                close_reason = "market_alert"
+            close_reason = self.get_exit_reason(row.to_dict(), alerts_df=alerts_df)
 
             if close_reason:
                 closed_row = row.to_dict()
