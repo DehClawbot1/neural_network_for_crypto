@@ -508,7 +508,11 @@ def main_loop():
                             continue
                         fill_result = order_manager.wait_for_fill(entry_order_id)
                         if not fill_result.get("filled"):
-                            logging.info("Live entry not filled for token_id=%s", token_id)
+                            logging.info("Live entry not filled for token_id=%s; attempting cancel for order_id=%s", token_id, entry_order_id)
+                            try:
+                                order_manager.cancel_stale_order(entry_order_id)
+                            except Exception as exc:
+                                logging.warning("Failed to cancel stale live entry order %s: %s", entry_order_id, exc)
                             continue
                         fill_payload = fill_result.get("response") or {}
                         actual_fill_price = float(fill_payload.get("price", fill_price) or fill_price)
