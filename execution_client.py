@@ -1,5 +1,8 @@
 import os
 import logging
+from pathlib import Path
+
+from dotenv import set_key
 
 
 class ExecutionClient:
@@ -30,13 +33,23 @@ class ExecutionClient:
         self.chain_id = int(chain_id or os.getenv("POLYMARKET_CHAIN_ID", "137"))
         self.private_key = private_key or os.getenv("PRIVATE_KEY")
         self.funder = funder or os.getenv("POLYMARKET_FUNDER")
-        self.signature_type = int(signature_type or os.getenv("POLYMARKET_SIGNATURE_TYPE", "0"))
+        env_signature_type = os.getenv("POLYMARKET_SIGNATURE_TYPE", "").strip()
+        if signature_type is not None:
+            self.signature_type = int(signature_type)
+        elif env_signature_type:
+            self.signature_type = int(env_signature_type)
+        else:
+            self.signature_type = 1 if self.funder else 0
         self.api_key = os.getenv("POLYMARKET_API_KEY")
         self.api_secret = os.getenv("POLYMARKET_API_SECRET")
         self.api_passphrase = os.getenv("POLYMARKET_API_PASSPHRASE")
 
         if not self.private_key:
             raise ValueError("PRIVATE_KEY is required for live-test execution client")
+        if self.funder and not str(self.funder).startswith("0x"):
+            logging.warning("ExecutionClient: POLYMARKET_FUNDER does not look like a wallet address: %s", self.funder)
+        if self.signature_type == 1 and not self.funder:
+            logging.warning("ExecutionClient: signature_type=1 without POLYMARKET_FUNDER may be incorrect for proxy-wallet accounts.")
 
         self.client = self.ClobClient(
             self.host,
@@ -47,6 +60,7 @@ class ExecutionClient:
         )
         self.api_creds = None
         self.credential_source = None
+        self.env_file = Path(".env")
         self._initialize_credentials()
 
     def _build_stored_creds(self):
@@ -58,50 +72,48 @@ class ExecutionClient:
         params = self.BalanceAllowanceParams(asset_type=self.AssetType.COLLATERAL)
         return self.client.get_balance_allowance(params=params)
 
+    def _creds_tuple(self, creds):
+        return (
+            getattr(creds, "api_key", getattr(creds, "key", None)),
+            getattr(creds, "api_secret", getattr(creds, "secret", None)),
+            getattr(creds, "api_passphrase", getattr(creds, "passphrase", None)),
+        )
+
+    def _persist_creds_to_env(self, creds):
+        if not self.env_file.exists():
+            self.env_file.touch()
+        set_key(str(self.env_file), "POLYMARKET_API_KEY", getattr(creds, "api_key", getattr(creds, "key", "")))
+        set_key(str(self.env_file), "POLYMARKET_API_SECRET", getattr(creds, "api_secret", getattr(creds, "secret", "")))
+        set_key(str(self.env_file), "POLYMARKET_API_PASSPHRASE", getattr(creds, "api_passphrase", getattr(creds, "passphrase", "")))
+
     def _initialize_credentials(self):
-        attempts = []
         stored_creds = self._build_stored_creds()
         if stored_creds is not None:
-            attempts.append(("stored_env", stored_creds))
-        try:
-            derived_creds = self.client.create_or_derive_api_creds()
-            attempts.append(("derived", derived_creds))
-        except Exception as exc:
-            logging.warning("ExecutionClient: failed to derive API creds: %s", exc)
-
-        last_exc = None
-        seen = set()
-        for source, creds in attempts:
-            if creds is None:
-                continue
-            key_tuple = (
-                getattr(creds, "api_key", getattr(creds, "key", None)),
-                getattr(creds, "api_secret", getattr(creds, "secret", None)),
-                getattr(creds, "api_passphrase", getattr(creds, "passphrase", None)),
-            )
-            if key_tuple in seen:
-                continue
-            seen.add(key_tuple)
             try:
-                self.client.set_api_creds(creds)
+                self.client.set_api_creds(stored_creds)
                 self._validate_current_creds()
-                self.api_creds = creds
-                self.credential_source = source
-                if source == "derived":
-                    print(
-                        "SAVE THESE TO .ENV:\n"
-                        f"POLYMARKET_API_KEY={getattr(creds, 'api_key', getattr(creds, 'key', ''))}\n"
-                        f"POLYMARKET_API_SECRET={getattr(creds, 'api_secret', getattr(creds, 'secret', ''))}\n"
-                        f"POLYMARKET_API_PASSPHRASE={getattr(creds, 'api_passphrase', getattr(creds, 'passphrase', ''))}"
-                    )
+                self.api_creds = stored_creds
+                self.credential_source = "stored_env"
                 return
             except Exception as exc:
-                last_exc = exc
-                logging.warning("ExecutionClient: credential attempt '%s' failed: %s", source, exc)
+                logging.warning("ExecutionClient: stored L2 creds failed validation: %s", exc)
 
-        if last_exc is not None:
-            raise last_exc
-        raise ValueError("Unable to initialize Polymarket API credentials")
+        try:
+            derived_creds = self.client.create_or_derive_api_creds()
+            self.client.set_api_creds(derived_creds)
+            self._validate_current_creds()
+            self.api_creds = derived_creds
+            self.credential_source = "derived_refreshed_env"
+            self._persist_creds_to_env(derived_creds)
+            print(
+                "REFRESHED .ENV WITH DERIVED L2 CREDS:\n"
+                f"POLYMARKET_API_KEY={getattr(derived_creds, 'api_key', getattr(derived_creds, 'key', ''))}\n"
+                f"POLYMARKET_API_SECRET={getattr(derived_creds, 'api_secret', getattr(derived_creds, 'secret', ''))}\n"
+                f"POLYMARKET_API_PASSPHRASE={getattr(derived_creds, 'api_passphrase', getattr(derived_creds, 'passphrase', ''))}"
+            )
+            return
+        except Exception as exc:
+            raise exc
 
     def create_and_post_order(self, token_id, price, size, side="BUY", order_type="GTC", options=None):
         side_const = self.BUY if str(side).upper() == "BUY" else self.SELL
