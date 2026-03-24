@@ -162,7 +162,7 @@ def log_ranked_signal(signal_row):
     record = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "market": signal_row.get("market_title", "Unknown Market"),
-        "wallet_copied": str(signal_row.get("trader_wallet", "Unknown"))[:8],
+        "wallet_copied": str(signal_row.get("trader_wallet", signal_row.get("wallet_copied", "Unknown"))),
         "token_id": signal_row.get("token_id"),
         "condition_id": signal_row.get("condition_id"),
         "order_side": signal_row.get("order_side", signal_row.get("trade_side", "BUY")),
@@ -234,7 +234,7 @@ def execute_paper_trade(action, signal_row, fill_price=None):
     trade_record = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "market": signal_row.get("market_title", "Unknown Market"),
-        "wallet_copied": str(signal_row.get("trader_wallet", "Unknown"))[:8],
+        "wallet_copied": str(signal_row.get("trader_wallet", signal_row.get("wallet_copied", "Unknown"))),
         "token_id": signal_row.get("token_id"),
         "condition_id": signal_row.get("condition_id"),
         "outcome_side": outcome_side,
@@ -267,7 +267,7 @@ def log_live_fill_event(signal_row, fill_price, size_usdc, action_type="LIVE_TRA
     trade_record = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "market": signal_row.get("market_title", signal_row.get("market", "Unknown Market")),
-        "wallet_copied": str(signal_row.get("trader_wallet", signal_row.get("wallet_copied", "Unknown")))[:8],
+        "wallet_copied": str(signal_row.get("trader_wallet", signal_row.get("wallet_copied", "Unknown"))),
         "token_id": signal_row.get("token_id"),
         "condition_id": signal_row.get("condition_id"),
         "outcome_side": str(signal_row.get("outcome_side", signal_row.get("side", "UNKNOWN"))).upper(),
