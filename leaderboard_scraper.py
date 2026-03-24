@@ -11,6 +11,12 @@ from urllib3.util.retry import Retry
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
+def _today_start_iso():
+    local_now = pd.Timestamp.now(tz="Europe/Lisbon")
+    start_local = local_now.normalize()
+    return start_local.tz_convert("UTC")
+
+
 def _normalize_timestamp_value(value):
     if value in [None, ""]:
         return value
@@ -103,6 +109,7 @@ def get_recent_btc_trades(wallet_address, limit=50, market_universe=None):
         trades = response.json()
 
         market_universe = market_universe or {"condition_ids": set(), "token_ids": set(), "slugs": set()}
+        today_start_utc = _today_start_iso()
         signals = []
         for trade in trades:
             cond_id = trade.get("conditionId") or trade.get("condition_id")
@@ -124,6 +131,11 @@ def get_recent_btc_trades(wallet_address, limit=50, market_universe=None):
             if not mapped_to_btc and not keyword_fallback:
                 continue
 
+            normalized_ts = _normalize_timestamp_value(trade.get("timestamp"))
+            trade_ts = pd.to_datetime(normalized_ts, utc=True, errors="coerce")
+            if pd.isna(trade_ts) or trade_ts < today_start_utc:
+                continue
+
             order_side = str(trade.get("side", "BUY") or "BUY").upper()
             entry_intent = "OPEN_LONG" if order_side == "BUY" else "CLOSE_LONG"
             signals.append(
@@ -142,7 +154,7 @@ def get_recent_btc_trades(wallet_address, limit=50, market_universe=None):
                     "side": trade.get("outcome"),
                     "price": float(trade.get("price", 0)),
                     "size": float(trade.get("size", 0)),
-                    "timestamp": _normalize_timestamp_value(trade.get("timestamp")),
+                    "timestamp": normalized_ts,
                 }
             )
         return signals
