@@ -27,14 +27,14 @@ class OrderManager:
     def _append(self, path: Path, row: dict):
         pd.DataFrame([row]).to_csv(path, mode="a", header=not path.exists(), index=False)
 
-    def check_readiness(self, asset_type=None):
+    def check_readiness(self, asset_type=None, token_id=None):
         try:
             if hasattr(self.client, "update_balance_allowance"):
-                self.client.update_balance_allowance(asset_type=asset_type)
+                self.client.update_balance_allowance(asset_type=asset_type, token_id=token_id)
         except Exception:
             pass
         try:
-            return self.client.get_balance_allowance(asset_type=asset_type)
+            return self.client.get_balance_allowance(asset_type=asset_type, token_id=token_id)
         except Exception:
             return None
 
@@ -93,7 +93,7 @@ class OrderManager:
             self._append(self.orders_file, row)
             return row, None
 
-        readiness = self.check_readiness(asset_type="COLLATERAL") if normalized_side == "BUY" else None
+        readiness = self.check_readiness(asset_type="COLLATERAL") if normalized_side == "BUY" else self.check_readiness(asset_type="CONDITIONAL", token_id=token_id)
         available_balance = float(readiness.get("balance", readiness.get("amount", 0.0))) if isinstance(readiness, dict) else None
         if normalized_side == "BUY":
             if not readiness:
@@ -102,6 +102,15 @@ class OrderManager:
                 return row, None
             if (available_balance or 0.0) < float(notional_usdc):
                 row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "size_usdc": notional_usdc, "order_size_shares": order_size_shares, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "REJECTED", "reason": "insufficient_funds", "available_balance": available_balance}
+                self._append(self.orders_file, row)
+                return row, None
+        else:
+            if not readiness:
+                row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "size_usdc": notional_usdc, "order_size_shares": order_size_shares, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "REJECTED", "reason": "missing_token_readiness"}
+                self._append(self.orders_file, row)
+                return row, None
+            if (available_balance or 0.0) < float(order_size_shares):
+                row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "size_usdc": notional_usdc, "order_size_shares": order_size_shares, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "REJECTED", "reason": "insufficient_token_inventory", "available_token_balance": available_balance}
                 self._append(self.orders_file, row)
                 return row, None
 
