@@ -1165,17 +1165,17 @@ def render_model_status(model_status_df, supervised_eval_df, time_split_eval_df,
     weights_status = "🟢 current" if WEIGHTS_FILE.exists() else "🔴 missing"
     st.write(f"**Weights file:** {weights_status}")
 
-    acc = "-"
+    in_sample_acc = "N/A"
     if not supervised_eval_df.empty and "accuracy" in supervised_eval_df.columns:
-        acc = f"{float(supervised_eval_df.iloc[-1]['accuracy']):.3f}"
-    test_acc = "-"
+        in_sample_acc = f"{float(supervised_eval_df.iloc[-1]['accuracy']):.3f}"
+    test_acc = "N/A"
     if not time_split_eval_df.empty and "test_accuracy" in time_split_eval_df.columns:
         test_acc = f"{float(time_split_eval_df.iloc[-1]['test_accuracy']):.3f}"
-    sharpe = "-"
+    sharpe = "N/A"
     if not supervised_eval_df.empty and "sharpe" in supervised_eval_df.columns:
         sharpe = f"{float(supervised_eval_df.iloc[-1]['sharpe']):.3f}"
-    latest_champion = "-"
-    last_training_date = "-"
+    latest_champion = "N/A"
+    last_training_date = "N/A"
     if not model_registry_df.empty:
         name_col = "model_name" if "model_name" in model_registry_df.columns else "name" if "name" in model_registry_df.columns else None
         date_col = "promoted_at" if "promoted_at" in model_registry_df.columns else "trained_at" if "trained_at" in model_registry_df.columns else None
@@ -1185,12 +1185,19 @@ def render_model_status(model_status_df, supervised_eval_df, time_split_eval_df,
             last_training_date = str(model_registry_df.iloc[-1][date_col])
 
     top1, top2, top3, top4, top5, top6 = st.columns(6)
-    top1.metric("Supervised Accuracy", acc)
-    top2.metric("Time-Split Test Acc", test_acc)
+    top1.metric("Time-Split Test Acc", test_acc)
+    top2.metric("Replay Trades", len(path_replay_df))
     top3.metric("Sharpe-like", sharpe)
-    top4.metric("Replay Trades", len(path_replay_df))
+    top4.metric("In-Sample Acc (secondary)", in_sample_acc)
     top5.metric("Latest Champion Model", latest_champion)
     top6.metric("Last Training Date", last_training_date)
+    if in_sample_acc != "N/A" and test_acc != "N/A":
+        try:
+            gap = abs(float(in_sample_acc) - float(test_acc))
+            if gap > 0.20:
+                st.warning("Large gap between in-sample and time-split metrics. Prefer time-split / replay metrics for trust decisions.")
+        except Exception:
+            pass
 
     if not model_status_df.empty:
         latest = model_status_df.iloc[-1].to_dict()
