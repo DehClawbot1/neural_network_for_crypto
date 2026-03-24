@@ -107,23 +107,23 @@ def fetch_btc_markets(limit_per_page=100, closed=False, max_offset=2000):
     This is for research/monitoring only.
     """
     markets = []
-    for closed_flag in [False, True]:
-        offset = 0
-        while True:
-            params = {
-                "limit": limit_per_page,
-                "offset": offset,
-                "closed": str(closed_flag).lower(),
-            }
-            response = requests.get(GAMMA_MARKETS_URL, params=params, timeout=20)
-            response.raise_for_status()
-            page_data = response.json()
-            if not page_data:
-                break
-            markets.extend(page_data)
-            offset += limit_per_page
-            if offset > max_offset:
-                break
+    closed_flag = bool(closed)
+    offset = 0
+    while True:
+        params = {
+            "limit": limit_per_page,
+            "offset": offset,
+            "closed": str(closed_flag).lower(),
+        }
+        response = requests.get(GAMMA_MARKETS_URL, params=params, timeout=20)
+        response.raise_for_status()
+        page_data = response.json()
+        if not page_data:
+            break
+        markets.extend(page_data)
+        offset += limit_per_page
+        if offset > max_offset:
+            break
 
     btc_markets = []
     for market in markets:
