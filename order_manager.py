@@ -29,9 +29,54 @@ class OrderManager:
 
     def check_readiness(self, asset_type=None):
         try:
+            if hasattr(self.client, "update_balance_allowance"):
+                self.client.update_balance_allowance(asset_type=asset_type)
+        except Exception:
+            pass
+        try:
             return self.client.get_balance_allowance(asset_type=asset_type)
         except Exception:
             return None
+
+    def _extract_orderbook_levels(self, orderbook):
+        if isinstance(orderbook, dict):
+            bids = orderbook.get("bids") or []
+            asks = orderbook.get("asks") or []
+            return bids, asks
+        bids = getattr(orderbook, "bids", None) or []
+        asks = getattr(orderbook, "asks", None) or []
+        return bids, asks
+
+    def _get_market_context(self, token_id, side):
+        context = {}
+
+        try:
+            orderbook = self.client.get_orderbook(token_id)
+            bids, asks = self._extract_orderbook_levels(orderbook)
+            context["orderbook_ok"] = True
+            context["bid_levels"] = len(bids)
+            context["ask_levels"] = len(asks)
+            context["tradable"] = bool(bids or asks)
+        except Exception as exc:
+            message = str(exc)
+            context["orderbook_ok"] = False
+            context["tradable"] = False
+            context["orderbook_error"] = message
+            if "orderbook" in message.lower() and "does not exist" in message.lower():
+                context["reason"] = "orderbook_not_found"
+            return context
+
+        try:
+            context["quoted_price"] = self.client.get_price(token_id, side=side)
+        except Exception as exc:
+            context["price_error"] = str(exc)
+
+        try:
+            context["quoted_spread"] = self.client.get_spread(token_id)
+        except Exception as exc:
+            context["spread_error"] = str(exc)
+
+        return context
 
     def submit_entry(self, token_id, price, size, side="BUY", condition_id=None, outcome_side=None, spread=None, open_orders=0, daily_pnl=0.0, order_type="GTC", post_only=False, execution_style="maker"):
         decision = self.risk.pre_trade_check(token_id=token_id, price=price, size=size, spread=spread, open_orders=open_orders, daily_pnl=daily_pnl)
@@ -55,11 +100,41 @@ class OrderManager:
             self._append(self.orders_file, row)
             return row, None
 
+        market_context = self._get_market_context(token_id=token_id, side=side)
+        if not market_context.get("tradable"):
+            row = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "order_id": None,
+                "idempotency_key": idempotency_key,
+                "token_id": token_id,
+                "condition_id": condition_id,
+                "outcome_side": outcome_side,
+                "order_side": side,
+                "price": price,
+                "size": size,
+                "order_type": order_type,
+                "post_only": post_only,
+                "execution_style": execution_style,
+                "status": "REJECTED",
+                "reason": market_context.get("reason", "non_tradable_orderbook"),
+                "readiness": readiness,
+                **market_context,
+            }
+            self._append(self.orders_file, row)
+            try:
+                self.db.execute(
+                    "INSERT INTO risk_events (token_id, event_type, detail) VALUES (?, ?, ?)",
+                    (str(token_id), row["reason"], str(market_context.get("orderbook_error") or "non-tradable orderbook")),
+                )
+            except Exception:
+                pass
+            return row, None
+
         try:
             response = self.client.create_and_post_order(token_id=token_id, price=price, size=size, side=side, order_type=order_type, options={"post_only": bool(post_only)})
         except Exception as exc:
             self.risk.record_failed_order()
-            row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "FAILED", "reason": str(exc)}
+            row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "FAILED", "reason": str(exc), "readiness": readiness, **market_context}
             self._append(self.orders_file, row)
             return row, None
 
@@ -79,6 +154,7 @@ class OrderManager:
             "execution_style": execution_style,
             "status": response.get("status", "SUBMITTED"),
             "readiness": readiness,
+            **market_context,
         }
         self._append(self.orders_file, row)
         self.db.execute(
@@ -193,5 +269,3 @@ class OrderManager:
             (row.get("trade_id") or row.get("fill_id"), row.get("order_id"), row.get("token_id"), row.get("price"), row.get("size"), row.get("timestamp")),
         )
         return fill_payload
-
-
