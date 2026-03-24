@@ -354,9 +354,16 @@ def main_loop():
             scored_df = signal_engine.score_features(inferred_df)
 
             if shadow_purgatory is not None and not scored_df.empty:
-                for _, row in scored_df.head(5).iterrows():
+                merge_keys = [c for c in ["token_id", "timestamp", "trader_wallet", "market_slug", "market_title"] if c in scored_df.columns and c in inferred_df.columns]
+                if merge_keys:
+                    shadow_candidates = scored_df.head(5).merge(inferred_df, on=merge_keys, how="left", suffixes=("", "_full"))
+                else:
+                    shadow_candidates = scored_df.head(5).copy()
+                for _, row in shadow_candidates.iterrows():
                     try:
-                        shadow_purgatory.log_intent(row.to_dict(), pd.DataFrame([row]))
+                        signal_payload = row.to_dict()
+                        full_features = pd.DataFrame([row.to_dict()])
+                        shadow_purgatory.log_intent(signal_payload, full_features)
                     except Exception as exc:
                         logging.warning("Shadow logging failed for %s: %s", row.get("market_title", row.get("market")), exc)
 
