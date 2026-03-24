@@ -2,6 +2,8 @@ import os
 import logging
 from pathlib import Path
 
+import requests
+
 from dotenv import set_key
 
 
@@ -105,12 +107,7 @@ class ExecutionClient:
             self.api_creds = derived_creds
             self.credential_source = "derived_refreshed_env"
             self._persist_creds_to_env(derived_creds)
-            print(
-                "REFRESHED .ENV WITH DERIVED L2 CREDS:\n"
-                f"POLYMARKET_API_KEY={getattr(derived_creds, 'api_key', getattr(derived_creds, 'key', ''))}\n"
-                f"POLYMARKET_API_SECRET={getattr(derived_creds, 'api_secret', getattr(derived_creds, 'secret', ''))}\n"
-                f"POLYMARKET_API_PASSPHRASE={getattr(derived_creds, 'api_passphrase', getattr(derived_creds, 'passphrase', ''))}"
-            )
+            print("REFRESHED .ENV WITH DERIVED L2 CREDS (values persisted, hidden in logs).")
             return
         except Exception as exc:
             raise exc
@@ -157,6 +154,51 @@ class ExecutionClient:
     def get_balance_allowance(self, asset_type="COLLATERAL", token_id=None):
         params = self._build_balance_params(asset_type=asset_type, token_id=token_id)
         return self.client.get_balance_allowance(params=params)
+
+    def _rpc_call(self, rpc_url, method, params):
+        response = requests.post(
+            rpc_url,
+            json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+            timeout=20,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("error"):
+            raise RuntimeError(payload["error"])
+        return payload.get("result")
+
+    def _erc20_balance(self, token_address, wallet_address, rpc_url=None):
+        wallet_address = str(wallet_address or "")
+        if not wallet_address.startswith("0x"):
+            return 0.0
+        rpc_url = rpc_url or os.getenv("POLYGON_RPC_URL", "https://polygon-bor-rpc.publicnode.com")
+        decimals_result = self._rpc_call(rpc_url, "eth_call", [{"to": token_address, "data": "0x313ce567"}, "latest"])
+        decimals = int(decimals_result, 16)
+        balance_data = "0x70a08231" + ("0" * 24) + wallet_address.lower().replace("0x", "")
+        balance_result = self._rpc_call(rpc_url, "eth_call", [{"to": token_address, "data": balance_data}, "latest"])
+        raw_balance = int(balance_result, 16)
+        return raw_balance / (10 ** decimals)
+
+    def get_onchain_collateral_balance(self, wallet_address=None):
+        wallet_address = wallet_address or self.funder or os.getenv("POLYMARKET_PUBLIC_ADDRESS")
+        token_candidates = [
+            "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+            "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
+        ]
+        balances = {}
+        total = 0.0
+        for token in token_candidates:
+            try:
+                balance = float(self._erc20_balance(token, wallet_address))
+            except Exception:
+                balance = 0.0
+            balances[token] = balance
+            total += balance
+        return {
+            "wallet": wallet_address,
+            "balances": balances,
+            "total": total,
+        }
 
     def get_available_balance(self, asset_type=None):
         payload = self.get_balance_allowance(asset_type=asset_type)
