@@ -34,6 +34,7 @@ from stage3_hybrid import Stage3HybridScorer
 from strategy_layers import EntryRuleLayer
 from rl_entry_inference import EntryRLInference
 from rl_position_inference import PositionRLInference
+from rl_observation_schemas import prepare_entry_observation, prepare_position_observation
 from shadow_purgatory import ShadowPurgatory
 from db import Database
 
@@ -119,56 +120,8 @@ def load_position_brain():
 
 
 def prepare_observation(feature_row, legacy=False):
-    """
-    Converts grouped feature-engine output into the observation vector for the RL Brain.
-    Supports a legacy 4-feature fallback for older saved models.
-    """
-    if legacy:
-        obs = np.array(
-            [
-                float(feature_row.get("trader_win_rate", 0.5)),
-                float(feature_row.get("normalized_trade_size", 0.5)),
-                float(feature_row.get("current_price", 0.5)),
-                float(feature_row.get("time_left", 0.5)),
-            ],
-            dtype=np.float32,
-        )
-        return obs
-
-    obs = np.array(
-        [
-            float(feature_row.get("trader_win_rate", 0.5)),
-            float(feature_row.get("normalized_trade_size", 0.5)),
-            float(feature_row.get("current_price", 0.5)),
-            float(feature_row.get("time_left", 0.5)),
-            float(feature_row.get("liquidity_score", 0.5)),
-            float(feature_row.get("volume_score", 0.5)),
-            float(feature_row.get("probability_momentum", 0.5)),
-            float(feature_row.get("volatility_score", 0.5)),
-            float(feature_row.get("whale_pressure", 0.5)),
-            float(feature_row.get("market_structure_score", 0.5)),
-        ],
-        dtype=np.float32,
-    )
-    return obs
-
-
-def prepare_position_observation(position_row):
-    return np.array(
-        [
-            float(position_row.get("confidence", 0.5)),
-            float(position_row.get("shares", 0.0)),
-            float(position_row.get("current_price", 0.5)),
-            float(position_row.get("entry_price", 0.5)),
-            float(position_row.get("market_value", 0.0)),
-            float(position_row.get("unrealized_pnl", 0.0)),
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-        ],
-        dtype=np.float32,
-    )
+    """Compatibility wrapper for the shared entry observation schema."""
+    return prepare_entry_observation(feature_row, legacy=legacy)
 
 
 def safe_read_csv(path):

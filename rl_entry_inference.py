@@ -1,28 +1,10 @@
 from pathlib import Path
 
-import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from polytrade_env import PolyTradeEnv
-
-
-def prepare_entry_observation(feature_row):
-    return np.array(
-        [
-            float(feature_row.get("trader_win_rate", 0.5)),
-            float(feature_row.get("normalized_trade_size", 0.5)),
-            float(feature_row.get("current_price", 0.5)),
-            float(feature_row.get("time_left", 0.5)),
-            float(feature_row.get("liquidity_score", 0.5)),
-            float(feature_row.get("volume_score", 0.5)),
-            float(feature_row.get("probability_momentum", 0.5)),
-            float(feature_row.get("volatility_score", 0.5)),
-            float(feature_row.get("whale_pressure", 0.5)),
-            float(feature_row.get("market_structure_score", 0.5)),
-        ],
-        dtype=np.float32,
-    )
+from rl_observation_schemas import prepare_entry_observation
 
 
 class EntryRLInference:

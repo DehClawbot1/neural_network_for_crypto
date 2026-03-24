@@ -1,28 +1,10 @@
 from pathlib import Path
 
-import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from polytrade_env import PolyTradeEnv
-
-
-def prepare_position_observation(position_row):
-    return np.array(
-        [
-            float(position_row.get("confidence", 0.5)),
-            float(position_row.get("shares", 0.0)),
-            float(position_row.get("current_price", 0.5)),
-            float(position_row.get("entry_price", 0.5)),
-            float(position_row.get("market_value", 0.0)),
-            float(position_row.get("unrealized_pnl", 0.0)),
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-        ],
-        dtype=np.float32,
-    )
+from rl_observation_schemas import prepare_position_observation
 
 
 class PositionRLInference:
