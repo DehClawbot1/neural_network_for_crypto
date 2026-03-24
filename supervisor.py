@@ -39,6 +39,7 @@ from rl_position_inference import PositionRLInference
 from rl_observation_schemas import prepare_entry_observation, prepare_position_observation
 from shadow_purgatory import ShadowPurgatory
 from live_position_book import LivePositionBook
+from live_pnl import LivePnLCalculator
 from reconciliation_service import ReconciliationService
 from db import Database
 
@@ -226,52 +227,6 @@ def quote_exit_price(signal_row, slippage=0.01):
     return max(0.01, base_price - slippage)
 
 
-def get_tp_target_price(position_manager, position_row):
-    entry_price = float(position_row.get("entry_price", 0.0) or 0.0)
-    if entry_price <= 0:
-        return None
-    move_target = entry_price + float(position_manager.take_profit_price_move)
-    roi_target = entry_price * (1.0 + float(position_manager.take_profit_roi_pct))
-    return max(move_target, roi_target)
-
-
-def submit_live_exit(order_manager, position_manager, pos_dict, exit_reason):
-    token_id = str(pos_dict.get("token_id", "") or "")
-    exit_size = float(pos_dict.get("shares", 0.0) or 0.0)
-    if exit_size <= 0:
-        logging.warning("Live exit skipped for %s due to invalid size", token_id)
-        return None, None, None
-
-    if exit_reason in {"take_profit_price_move", "take_profit_roi"}:
-        target_price = get_tp_target_price(position_manager, pos_dict)
-        if target_price is None or target_price <= 0:
-            logging.warning("Live TP exit skipped for %s due to invalid target", token_id)
-            return None, None, None
-        exit_row, exit_response = order_manager.monitor_and_trigger_exit(
-            token_id=token_id,
-            target_price=target_price,
-            size=exit_size,
-            condition_id=pos_dict.get("condition_id"),
-            outcome_side=pos_dict.get("outcome_side"),
-        )
-        return exit_row, exit_response, target_price
-
-    exit_price = quote_exit_price(pos_dict)
-    if exit_price <= 0:
-        logging.warning("Live exit skipped for %s due to invalid exit price", token_id)
-        return None, None, None
-    exit_row, exit_response = order_manager.submit_entry(
-        token_id=token_id,
-        price=exit_price,
-        size=exit_size,
-        side="SELL",
-        condition_id=pos_dict.get("condition_id"),
-        outcome_side=pos_dict.get("outcome_side"),
-        execution_style="taker",
-    )
-    return exit_row, exit_response, exit_price
-
-
 def execute_paper_trade(action, signal_row, fill_price=None):
     """Simulates a trade fill and logs the hypothetical position."""
     if action == 0:
@@ -397,6 +352,7 @@ def main_loop():
     execution_client = ExecutionClient() if trading_mode == "live" else None
     order_manager = OrderManager() if trading_mode == "live" else None
     live_position_book = LivePositionBook() if trading_mode == "live" else None
+    live_pnl = LivePnLCalculator() if trading_mode == "live" else None
     reconciliation_service = ReconciliationService(execution_client) if trading_mode == "live" and execution_client is not None else None
     trade_manager = TradeManager()
     autonomous_monitor = AutonomousMonitor()
@@ -752,8 +708,11 @@ def main_loop():
                             trade.close(exit_price=trade.current_price) # Paper close
                             logging.info("Paper EXIT for %s. Realized PnL: %.2f", token_id, trade.realized_pnl)
                             trade_manager.active_trades.pop(f"{trade.market}-{trade.outcome_side}", None) # Remove from active trades
-                        else:
-                            position_manager.close_position(pos_dict, reason="rl_exit")
+
+            # Process any pending exits (e.g., from CLOSE_LONG signals or internal rules)
+            closed_trades = trade_manager.process_exits(datetime.now())
+            if closed_trades:
+                logging.info("[%s] Processed %s closed trades.", trading_mode.upper(), len(closed_trades))
 
             # 5. Phase 2 analytics outputs
             trades_df = safe_read_csv(EXECUTION_FILE)
@@ -763,41 +722,31 @@ def main_loop():
             dataset_builder.write()
 
             alerts_df = safe_read_csv("logs/alerts.csv")
-            if trading_mode == "live" and live_position_book is not None:
+
+            if trading_mode == "live" and live_position_book is not None and live_pnl is not None:
                 live_position_book.rebuild_from_db()
-                open_positions_df = live_position_book.get_enriched_open_positions(scored_df=scored_df, fallback_df=position_manager.get_open_positions())
+                open_positions_df_for_status = live_position_book.get_enriched_open_positions(scored_df=scored_df)
+                open_positions_df_for_status = live_pnl.enrich_positions(open_positions_df_for_status)
+                pnl_summary = live_pnl.summarize_portfolio(open_positions_df_for_status)
+                autonomous_monitor.write_heartbeat(
+                    "trade_manager",
+                    status="ok",
+                    message="live_positions_reconciled",
+                    extra={
+                        "open_positions": pnl_summary.get("open_positions", 0),
+                        "gross_market_value": pnl_summary.get("gross_market_value", 0.0),
+                        "realized_pnl": pnl_summary.get("realized_pnl", 0.0),
+                        "unrealized_pnl": pnl_summary.get("unrealized_pnl", 0.0),
+                        "total_pnl": pnl_summary.get("total_pnl", 0.0),
+                        "pnl_source": pnl_summary.get("pnl_source", "live_reconciled"),
+                    },
+                )
             else:
-                open_positions_df = position_manager.get_open_positions()
-            if trading_mode == "live" and order_manager is not None and not open_positions_df.empty:
-                logging.info("Checking live exit rules for %s positions...", len(open_positions_df))
-                for _, pos_row in open_positions_df.iterrows():
-                    pos_dict = pos_row.to_dict()
-                    token_id = str(pos_dict.get("token_id", "") or "")
-                    exit_reason = position_manager.get_exit_reason(pos_dict, alerts_df=alerts_df)
-                    if not exit_reason:
-                        continue
-                    logging.info("Live exit rule triggered for %s: %s", token_id, exit_reason)
-                    exit_row, exit_response, exit_price = submit_live_exit(order_manager, position_manager, pos_dict, exit_reason)
-                    exit_order_id = (exit_row or {}).get("order_id") or (exit_response or {}).get("orderID") or (exit_response or {}).get("order_id") or (exit_response or {}).get("id")
-                    if not exit_order_id:
-                        logging.info("Live exit waiting/rejected for token_id=%s reason=%s", token_id, (exit_row or {}).get("reason"))
-                        continue
-                    fill_result = order_manager.wait_for_fill(exit_order_id)
-                    if fill_result.get("filled"):
-                        fill_payload = fill_result.get("response") or {}
-                        actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
-                        actual_fill_size = float(fill_payload.get("size", pos_dict.get("shares", 0.0)) or pos_dict.get("shares", 0.0))
-                        log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0), action_type="LIVE_EXIT")
-                        position_manager.close_position(pos_dict, reason=f"live_{exit_reason}", exit_price=actual_fill_price, filled_shares=actual_fill_size)
-            else:
-                position_manager.apply_exit_rules(alerts_df)
-            if trading_mode == "live" and live_position_book is not None:
-                live_position_book.rebuild_from_db()
-                open_positions_df = live_position_book.get_enriched_open_positions(scored_df=scored_df, fallback_df=position_manager.get_open_positions())
-            else:
-                open_positions_df = position_manager.get_open_positions()
-            autonomous_monitor.write_heartbeat("position_manager", status="ok", message="positions_updated", extra={"open_positions": len(open_positions_df) if open_positions_df is not None else 0})
-            autonomous_monitor.write_status(trader_signals_df, trades_df, alerts_df, open_positions_df)
+                open_positions_for_status = trade_manager.get_open_positions()
+                open_positions_df_for_status = pd.DataFrame([trade.__dict__ for trade in open_positions_for_status]) if open_positions_for_status else pd.DataFrame()
+                autonomous_monitor.write_heartbeat("trade_manager", status="ok", message="trades_updated", extra={"open_positions": len(open_positions_for_status)})
+
+            autonomous_monitor.write_status(trader_signals_df, trades_df, alerts_df, open_positions_df_for_status)
             try:
                 sync_ops_state_to_db("logs")
             except Exception as exc:
