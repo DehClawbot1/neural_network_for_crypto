@@ -23,6 +23,9 @@ class WhaleTracker:
             return pd.DataFrame()
 
         df = signals_df.copy()
+        for col in ["price", "size", "alpha_score", "wallet_alpha_30d", "profit", "net_pnl", "realized_pnl"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         time_col = "timestamp" if "timestamp" in df.columns else "updated_at" if "updated_at" in df.columns else None
         profit_col = "profit" if "profit" in df.columns else "net_pnl" if "net_pnl" in df.columns else "realized_pnl" if "realized_pnl" in df.columns else None
         alpha_col = "alpha_score" if "alpha_score" in df.columns else "wallet_alpha_30d" if "wallet_alpha_30d" in df.columns else None
@@ -73,6 +76,9 @@ class WhaleTracker:
             return pd.DataFrame()
 
         df = signals_df.copy()
+        for col in ["price", "size"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         distribution = (
             df.groupby("market_title")
             .agg(
