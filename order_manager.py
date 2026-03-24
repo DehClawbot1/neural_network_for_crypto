@@ -80,7 +80,24 @@ class OrderManager:
 
     def submit_entry(self, token_id, price, size, side="BUY", condition_id=None, outcome_side=None, spread=None, open_orders=0, daily_pnl=0.0, order_type="GTC", post_only=False, execution_style="maker"):
         normalized_side = str(side).upper()
-        requested_size = float(size)
+        try:
+            price = float(price)
+        except Exception:
+            price = None
+        try:
+            requested_size = float(size)
+        except Exception:
+            requested_size = None
+
+        if price is None or price <= 0.0 or price >= 1.0:
+            row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "REJECTED", "reason": "invalid_price"}
+            self._append(self.orders_file, row)
+            return row, None
+        if requested_size is None or requested_size <= 0.0:
+            row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "REJECTED", "reason": "invalid_size"}
+            self._append(self.orders_file, row)
+            return row, None
+
         notional_usdc = requested_size if normalized_side == "BUY" else requested_size * float(price)
         order_size_shares = requested_size / max(float(price), 1e-9) if normalized_side == "BUY" else requested_size
         decision = self.risk.pre_trade_check(token_id=token_id, price=price, size=notional_usdc, spread=spread, open_orders=open_orders, daily_pnl=daily_pnl)
