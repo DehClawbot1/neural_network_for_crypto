@@ -93,8 +93,12 @@ class Stage2TemporalModels:
             return pd.DataFrame()
 
         df = self._stationarize_features(df, feature_cols)
+        if len(df) < 6:
+            return pd.DataFrame()
         metrics = {}
-        n_splits = min(5, max(2, len(df) // 50))
+        n_splits = min(5, len(df) - 1)
+        if n_splits < 2:
+            return pd.DataFrame()
         tscv = TimeSeriesSplit(n_splits=n_splits)
 
         if target_cls:
