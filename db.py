@@ -122,6 +122,14 @@ class Database:
                 status TEXT,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS state_mismatches (
+                mismatch_id TEXT PRIMARY KEY,
+                severity TEXT,
+                source TEXT,
+                detail TEXT,
+                created_at TEXT,
+                resolved_at TEXT
+            );
             CREATE INDEX IF NOT EXISTS idx_positions_token_id ON positions(token_id);
             CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status);
             CREATE INDEX IF NOT EXISTS idx_orders_token_id ON orders(token_id);
@@ -138,6 +146,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_system_health_created_at ON system_health(created_at);
             CREATE INDEX IF NOT EXISTS idx_live_positions_token_id ON live_positions(token_id);
             CREATE INDEX IF NOT EXISTS idx_live_positions_status ON live_positions(status);
+            CREATE INDEX IF NOT EXISTS idx_state_mismatches_created_at ON state_mismatches(created_at);
             """
         )
         self.conn.commit()

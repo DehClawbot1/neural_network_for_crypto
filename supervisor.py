@@ -41,6 +41,7 @@ from shadow_purgatory import ShadowPurgatory
 from live_position_book import LivePositionBook
 from live_pnl import LivePnLCalculator
 from reconciliation_service import ReconciliationService
+from mismatch_detector import StateMismatchDetector
 from db import Database
 
 # Configure logging for zero-intervention monitoring
@@ -354,6 +355,7 @@ def main_loop():
     live_position_book = LivePositionBook() if trading_mode == "live" else None
     live_pnl = LivePnLCalculator() if trading_mode == "live" else None
     reconciliation_service = ReconciliationService(execution_client) if trading_mode == "live" and execution_client is not None else None
+    mismatch_detector = StateMismatchDetector() if trading_mode == "live" else None
     trade_manager = TradeManager()
     autonomous_monitor = AutonomousMonitor()
     retrainer = Retrainer()
@@ -478,6 +480,17 @@ def main_loop():
             # 4A. Candidate-entry path for new signals
             current_active_trades = trade_manager.get_open_positions()
             active_trade_keys = {f"{trade.market}-{trade.outcome_side}" for trade in current_active_trades}
+            live_entry_freeze = False
+            if trading_mode == "live" and live_position_book is not None:
+                live_position_book.rebuild_from_db()
+                reconciled_positions_df = live_position_book.get_enriched_open_positions(scored_df=scored_df)
+                if mismatch_detector is not None:
+                    mismatch_summary = mismatch_detector.detect(current_active_trades, reconciled_positions_df)
+                    if mismatch_summary.get("freeze_entries"):
+                        live_entry_freeze = True
+                        mismatch_detector.record(mismatch_summary)
+                        logging.error("Live entry freeze active due to state mismatch: %s", mismatch_summary.get("detail"))
+                        autonomous_monitor.write_heartbeat("reconciliation", status="error", message="entry_freeze_state_mismatch", extra=mismatch_summary.get("detail", {}))
 
             for _, row in scored_df.iterrows():
                 signal_row = row.to_dict()
@@ -498,6 +511,9 @@ def main_loop():
 
                 # Skip if already have an open trade for this market/side
                 if market_key in active_trade_keys:
+                    continue
+                if trading_mode == "live" and live_entry_freeze:
+                    logging.warning("Skipping new live entry for %s because entry freeze is active", token_id)
                     continue
 
                 action_val = choose_action(
