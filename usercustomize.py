@@ -1,18 +1,29 @@
 """User-level runtime patches loaded automatically by Python when enabled.
 
-This hook extends the live-test ExecutionClient with a broader Polymarket
-example-compatible capability surface without forcing call-site rewrites.
+This hook applies repo-local runtime patches for Polymarket capability wiring
+and retraining/runtime overrides without forcing broad call-site rewrites.
 """
 
 from __future__ import annotations
 
 try:
-    from polymarket_capabilities import apply_execution_client_patch
+    from usercustomize_patches import apply_all_runtime_patches
 except Exception:
-    apply_execution_client_patch = None
+    apply_all_runtime_patches = None
 
-if apply_execution_client_patch is not None:
+if apply_all_runtime_patches is not None:
     try:
-        apply_execution_client_patch()
+        apply_all_runtime_patches()
     except Exception:
         pass
+else:
+    try:
+        from polymarket_capabilities import apply_execution_client_patch
+    except Exception:
+        apply_execution_client_patch = None
+
+    if apply_execution_client_patch is not None:
+        try:
+            apply_execution_client_patch()
+        except Exception:
+            pass
