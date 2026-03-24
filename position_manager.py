@@ -164,7 +164,7 @@ class PositionManager:
         self._write_positions(positions)
         return positions
 
-    def reduce_position(self, position_row: dict, fraction=0.5):
+    def reduce_position(self, position_row: dict, fraction=0.5, exit_price=None, filled_shares=None):
         positions = self._read_positions()
         if positions.empty or "position_id" not in positions.columns:
             return positions
@@ -178,11 +178,15 @@ class PositionManager:
         size_usdc = float(positions.at[idx, "size_usdc"] or 0.0)
         entry_price = float(positions.at[idx, "entry_price"] or 0.0)
         token_id = str(positions.at[idx, "token_id"] or "") if "token_id" in positions.columns else ""
-        quote = self.price_service.get_quote(token_id) if token_id else {}
-        live_price = quote.get("best_bid") or quote.get("midpoint") or quote.get("last_trade_price") or quote.get("price")
-        exit_price = float(live_price if live_price is not None else positions.at[idx, "current_price"] or entry_price)
+        if exit_price is None:
+            quote = self.price_service.get_quote(token_id) if token_id else {}
+            live_price = quote.get("best_bid") or quote.get("midpoint") or quote.get("last_trade_price") or quote.get("price")
+            exit_price = float(live_price if live_price is not None else positions.at[idx, "current_price"] or entry_price)
+        else:
+            exit_price = float(exit_price)
 
-        shares_closed = shares * fraction
+        shares_closed = float(filled_shares) if filled_shares is not None else shares * fraction
+        shares_closed = min(shares, max(0.0, shares_closed))
         shares_remaining = shares - shares_closed
         effective_exit_price = exit_price * (1.0 - self.slippage_rate)
         gross_realized_pnl = shares_closed * (effective_exit_price - entry_price)
@@ -202,7 +206,7 @@ class PositionManager:
         self._write_positions(positions)
         return positions
 
-    def close_position(self, position_row: dict, reason="policy_exit"):
+    def close_position(self, position_row: dict, reason="policy_exit", exit_price=None, filled_shares=None):
         positions = self._read_positions()
         if positions.empty or "position_id" not in positions.columns:
             return pd.DataFrame()
@@ -213,13 +217,17 @@ class PositionManager:
 
         row = positions[mask].iloc[0].to_dict()
         token_id = str(row.get("token_id", "") or "")
-        quote = self.price_service.get_quote(token_id) if token_id else {}
-        live_price = quote.get("best_bid") or quote.get("midpoint") or quote.get("last_trade_price") or quote.get("price")
-        exit_price = float(live_price if live_price is not None else row.get("current_price", row.get("entry_price", 0.5)))
+        if exit_price is None:
+            quote = self.price_service.get_quote(token_id) if token_id else {}
+            live_price = quote.get("best_bid") or quote.get("midpoint") or quote.get("last_trade_price") or quote.get("price")
+            exit_price = float(live_price if live_price is not None else row.get("current_price", row.get("entry_price", 0.5)))
+        else:
+            exit_price = float(exit_price)
         entry_price = float(row.get("entry_price", exit_price))
         size_usdc = float(row.get("size_usdc", 0.0) or 0.0)
         fees_paid = float(row.get("fees_paid", 0.0) or 0.0)
         shares = float(row.get("shares", 0.0) or 0.0)
+        shares = min(shares, max(0.0, float(filled_shares) if filled_shares is not None else shares))
         effective_exit_price = exit_price * (1.0 - self.slippage_rate)
         market_value = shares * effective_exit_price
         gross_realized_pnl = shares * (effective_exit_price - entry_price)

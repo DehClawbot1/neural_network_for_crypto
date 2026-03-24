@@ -458,8 +458,9 @@ def main_loop():
                                         if fill_result.get("filled"):
                                             fill_payload = fill_result.get("response") or {}
                                             actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                                            actual_fill_size = float(fill_payload.get("size", exit_size) or exit_size)
                                             log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0), action_type="LIVE_EXIT")
-                                            position_manager.close_position(pos_dict, reason="whale_sell_exit")
+                                            position_manager.close_position(pos_dict, reason="whale_sell_exit", exit_price=actual_fill_price, filled_shares=actual_fill_size)
                                 else:
                                     logging.warning("Live CLOSE_LONG skipped for %s due to missing exit price/size", token_id)
                             else:
@@ -564,8 +565,9 @@ def main_loop():
                                     if fill_result.get("filled"):
                                         fill_payload = fill_result.get("response") or {}
                                         actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                                        actual_fill_size = float(fill_payload.get("size", exit_size) or exit_size)
                                         log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0) * 0.5, action_type="LIVE_REDUCE")
-                                        position_manager.reduce_position(pos_dict, fraction=0.5)
+                                        position_manager.reduce_position(pos_dict, fraction=0.5, exit_price=actual_fill_price, filled_shares=actual_fill_size)
                         else:
                             position_manager.reduce_position(pos_dict, fraction=0.5)
                     elif pos_action_val == 5:
@@ -587,8 +589,9 @@ def main_loop():
                                     if fill_result.get("filled"):
                                         fill_payload = fill_result.get("response") or {}
                                         actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                                        actual_fill_size = float(fill_payload.get("size", exit_size) or exit_size)
                                         log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0), action_type="LIVE_EXIT")
-                                        position_manager.close_position(pos_dict, reason="rl_exit")
+                                        position_manager.close_position(pos_dict, reason="rl_exit", exit_price=actual_fill_price, filled_shares=actual_fill_size)
                         else:
                             position_manager.close_position(pos_dict, reason="rl_exit")
 
@@ -632,8 +635,9 @@ def main_loop():
                     if fill_result.get("filled"):
                         fill_payload = fill_result.get("response") or {}
                         actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                        actual_fill_size = float(fill_payload.get("size", exit_size) or exit_size)
                         log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0), action_type="LIVE_EXIT")
-                        position_manager.close_position(pos_dict, reason=f"live_{exit_reason}")
+                        position_manager.close_position(pos_dict, reason=f"live_{exit_reason}", exit_price=actual_fill_price, filled_shares=actual_fill_size)
             else:
                 position_manager.apply_exit_rules(alerts_df)
             open_positions_df = position_manager.get_open_positions()
