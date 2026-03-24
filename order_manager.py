@@ -131,7 +131,13 @@ class OrderManager:
             return row, None
 
         try:
-            response = self.client.create_and_post_order(token_id=token_id, price=price, size=size, side=side, order_type=order_type, options={"post_only": bool(post_only)})
+            if str(order_type).upper() == "GTD" and hasattr(self.client, "GTD_order"):
+                expiration = int((datetime.now(timezone.utc).timestamp()) + 3600)
+                response = self.client.GTD_order(token_id=token_id, price=price, size=size, expiration=expiration, side=side, post_only=bool(post_only))
+            elif bool(post_only) and hasattr(self.client, "post_only_order"):
+                response = self.client.post_only_order(token_id=token_id, price=price, size=size, side=side, order_type=order_type)
+            else:
+                response = self.client.create_and_post_order(token_id=token_id, price=price, size=size, side=side, order_type=order_type, options={"post_only": bool(post_only)})
         except Exception as exc:
             self.risk.record_failed_order()
             row = {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "idempotency_key": idempotency_key, "token_id": token_id, "condition_id": condition_id, "outcome_side": outcome_side, "order_side": side, "price": price, "size": size, "order_type": order_type, "post_only": post_only, "execution_style": execution_style, "status": "FAILED", "reason": str(exc), "readiness": readiness, **market_context}
@@ -251,6 +257,20 @@ class OrderManager:
     def cancel_stale_order(self, order_id):
         response = self.client.cancel_order(order_id)
         self._append(self.orders_file, {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": order_id, "status": "CANCELED"})
+        return response
+
+    def cancel_all_orders(self):
+        if not hasattr(self.client, "cancel_all"):
+            raise AttributeError("Execution client does not expose cancel_all")
+        response = self.client.cancel_all()
+        self._append(self.orders_file, {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "status": "CANCELED_ALL"})
+        return response
+
+    def cancel_market_orders(self, market="", asset_id=""):
+        if not hasattr(self.client, "cancel_market_orders"):
+            raise AttributeError("Execution client does not expose cancel_market_orders")
+        response = self.client.cancel_market_orders(market=market, asset_id=asset_id)
+        self._append(self.orders_file, {"timestamp": datetime.now(timezone.utc).isoformat(), "order_id": None, "status": "CANCELED_MARKET", "market": market, "asset_id": asset_id})
         return response
 
     def list_orders(self):

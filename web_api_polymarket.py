@@ -24,6 +24,26 @@ class ScoreCheckRequest(BaseModel):
     order_ids: list[str] = Field(default_factory=list)
 
 
+class OrderRequest(BaseModel):
+    token_id: str
+    price: float
+    size: float
+    side: str = "BUY"
+    order_type: str = "GTC"
+    expiration: int = 0
+
+
+class CancelMarketOrdersRequest(BaseModel):
+    market: str = ""
+    asset_id: str = ""
+
+
+class MarketOrderRequest(BaseModel):
+    token_id: str
+    amount: float
+    order_type: str = "FOK"
+
+
 @router.get("/capabilities")
 def get_capabilities():
     return {"capabilities": list_polymarket_capabilities()}
@@ -166,6 +186,83 @@ def cancel_order(order_id: str):
         client = get_execution_client()
         result = client.cancel_order(order_id)
         return {"ok": True, "order_id": order_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/orders/cancel-all")
+def cancel_all_orders():
+    try:
+        client = get_execution_client()
+        result = client.cancel_all()
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/orders/cancel-market")
+def cancel_orders_for_market(request: CancelMarketOrdersRequest):
+    try:
+        client = get_execution_client()
+        result = client.cancel_market_orders(market=request.market, asset_id=request.asset_id)
+        return {"ok": True, "market": request.market, "asset_id": request.asset_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/order/post-only")
+def post_only_order(request: OrderRequest):
+    try:
+        client = get_execution_client()
+        result = client.post_only_order(
+            token_id=request.token_id,
+            price=request.price,
+            size=request.size,
+            side=request.side,
+            order_type=request.order_type,
+            expiration=request.expiration,
+        )
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/order/gtd")
+def gtd_order(request: OrderRequest):
+    try:
+        if request.expiration <= 0:
+            raise HTTPException(status_code=400, detail="expiration must be a positive unix timestamp for GTD orders")
+        client = get_execution_client()
+        result = client.GTD_order(
+            token_id=request.token_id,
+            price=request.price,
+            size=request.size,
+            expiration=request.expiration,
+            side=request.side,
+        )
+        return {"ok": True, "result": result}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/order/market-buy")
+def market_buy_order(request: MarketOrderRequest):
+    try:
+        client = get_execution_client()
+        result = client.market_buy_order(token_id=request.token_id, amount=request.amount, order_type=request.order_type)
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/order/market-sell")
+def market_sell_order(request: MarketOrderRequest):
+    try:
+        client = get_execution_client()
+        result = client.market_sell_order(token_id=request.token_id, amount=request.amount, order_type=request.order_type)
+        return {"ok": True, "result": result}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
