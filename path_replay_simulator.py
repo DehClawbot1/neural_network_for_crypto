@@ -88,11 +88,6 @@ class PathReplaySimulator:
                     exit_time = future_row.get("timestamp")
                     exit_reason = "stop_loss"
                     break
-                if float(row.get("confidence", 1.0) or 1.0) < 0.45:
-                    exit_price = future_price
-                    exit_time = future_row.get("timestamp")
-                    exit_reason = "confidence_drop"
-                    break
 
             gross_pnl = PNLEngine.mark_to_market_pnl(capital_usdc, entry_price, exit_price)
             trades.append(
