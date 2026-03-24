@@ -141,12 +141,21 @@ class ExecutionClient:
     def get_trades(self):
         return self.client.get_trades()
 
-    def get_balance_allowance(self, asset_type="COLLATERAL", token_id=None):
+    def _build_balance_params(self, asset_type="COLLATERAL", token_id=None):
         target_asset = self.AssetType.COLLATERAL if str(asset_type).upper() == "COLLATERAL" else self.AssetType.CONDITIONAL
         kwargs = {"asset_type": target_asset}
         if target_asset == self.AssetType.CONDITIONAL and token_id is not None:
             kwargs["token_id"] = str(token_id)
-        params = self.BalanceAllowanceParams(**kwargs)
+        return self.BalanceAllowanceParams(**kwargs)
+
+    def update_balance_allowance(self, asset_type="COLLATERAL", token_id=None):
+        params = self._build_balance_params(asset_type=asset_type, token_id=token_id)
+        if hasattr(self.client, "update_balance_allowance"):
+            return self.client.update_balance_allowance(params=params)
+        return None
+
+    def get_balance_allowance(self, asset_type="COLLATERAL", token_id=None):
+        params = self._build_balance_params(asset_type=asset_type, token_id=token_id)
         return self.client.get_balance_allowance(params=params)
 
     def get_available_balance(self, asset_type=None):

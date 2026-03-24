@@ -91,6 +91,10 @@ def _read_live_client_state() -> Dict[str, Any]:
         client_funder = getattr(client, "funder", None)
         result["funder"] = client_funder or result["funder"] or fallback_address
         result["address_source"] = "client_funder" if client_funder else fallback_source
+        try:
+            client.update_balance_allowance(asset_type="COLLATERAL")
+        except Exception:
+            pass
         collat = client.get_balance_allowance(asset_type="COLLATERAL")
         result["client_ok"] = True
         if isinstance(collat, dict):
