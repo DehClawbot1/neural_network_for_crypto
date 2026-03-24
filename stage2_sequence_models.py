@@ -81,7 +81,7 @@ class Stage2SequenceModels:
                 continue
             base, lag = match.group(1), int(match.group(2))
             grouped.setdefault(lag, []).append((base, col))
-        ordered_lags = sorted(grouped.keys())
+        ordered_lags = sorted(grouped.keys(), reverse=True)
         if not ordered_lags:
             return None
         step_arrays = []
