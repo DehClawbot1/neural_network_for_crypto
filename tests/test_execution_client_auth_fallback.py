@@ -38,7 +38,7 @@ def test_execution_client_falls_back_to_derived_creds_when_stored_invalid(mock_g
     client = ExecutionClient()
 
     assert client.api_creds.api_key == "derived-key"
-    assert client.credential_source == "derived"
+    assert client.credential_source == "derived_refreshed_env"
     assert inner_client.set_api_creds.call_count == 2
 
 

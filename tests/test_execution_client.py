@@ -83,7 +83,7 @@ def test_init_derives_api_creds_when_missing(mock_getenv):
 
     assert client.api_creds is not None
     assert client.client is inner_client
-    assert client.credential_source == "derived"
+    assert client.credential_source == "derived_refreshed_env"
 
 
 @patch("execution_client.os.getenv")
