@@ -600,7 +600,6 @@ def main_loop():
             dataset_builder.write()
 
             alerts_df = safe_read_csv("logs/alerts.csv")
-            position_manager.update_mark_to_market(scored_df)
             open_positions_df = position_manager.get_open_positions()
             if trading_mode == "live" and order_manager is not None and not open_positions_df.empty:
                 logging.info("Checking live exit rules for %s positions...", len(open_positions_df))
