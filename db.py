@@ -15,6 +15,8 @@ class Database:
         self._ensure_column("model_decisions", "condition_id", "TEXT")
         self._ensure_column("model_decisions", "outcome_side", "TEXT")
         self._ensure_column("model_decisions", "feature_snapshot", "TEXT")
+        self._ensure_column("model_decisions", "model_artifact", "TEXT")
+        self._ensure_column("model_decisions", "normalization_artifact", "TEXT")
 
     def _init_schema(self):
         cur = self.conn.cursor()

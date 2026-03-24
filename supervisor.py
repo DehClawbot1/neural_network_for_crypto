@@ -328,6 +328,10 @@ def main_loop():
 
     entry_model_name = "ppo_entry_policy" if entry_brain is not None else "ppo_polytrader_legacy_entry" if legacy_brain is not None else "no_rl_entry"
     position_model_name = "ppo_position_policy" if position_brain is not None else "ppo_polytrader_legacy_position" if legacy_brain is not None else "no_rl_position"
+    entry_model_artifact = "weights/ppo_entry_policy.zip" if entry_brain is not None else "weights/ppo_polytrader.zip" if legacy_brain is not None else None
+    entry_norm_artifact = "weights/ppo_entry_vecnormalize.pkl" if entry_brain is not None else "weights/ppo_polytrader_vecnormalize.pkl" if legacy_brain is not None else None
+    position_model_artifact = "weights/ppo_position_policy.zip" if position_brain is not None else "weights/ppo_polytrader.zip" if legacy_brain is not None else None
+    position_norm_artifact = "weights/ppo_position_vecnormalize.pkl" if position_brain is not None else "weights/ppo_polytrader_vecnormalize.pkl" if legacy_brain is not None else None
 
     feature_builder = FeatureBuilder()
     signal_engine = SignalEngine()
@@ -518,7 +522,7 @@ def main_loop():
                 action_map = {0: "IGNORE", 1: "SMALL_BUY", 2: "LARGE_BUY"}
                 try:
                     db.execute(
-                        "INSERT INTO model_decisions (token_id, condition_id, outcome_side, model_name, score, action, feature_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO model_decisions (token_id, condition_id, outcome_side, model_name, score, action, feature_snapshot, model_artifact, normalization_artifact) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             token_id,
                             signal_row.get("condition_id"),
@@ -527,6 +531,8 @@ def main_loop():
                             float(signal_row.get("confidence", 0.0) or 0.0),
                             action_map.get(action_val, "UNKNOWN"),
                             build_feature_snapshot(signal_row),
+                            entry_model_artifact,
+                            entry_norm_artifact,
                         ),
                     )
                 except Exception as exc:
@@ -587,7 +593,7 @@ def main_loop():
                     action_str = pos_action_map.get(pos_action_val, "HOLD")
                     try:
                         db.execute(
-                            "INSERT INTO model_decisions (token_id, condition_id, outcome_side, model_name, score, action, feature_snapshot) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT INTO model_decisions (token_id, condition_id, outcome_side, model_name, score, action, feature_snapshot, model_artifact, normalization_artifact) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                             (
                                 token_id,
                                 pos_dict.get("condition_id"),
@@ -596,6 +602,8 @@ def main_loop():
                                 float(pos_dict.get("confidence", 0.5) or 0.5),
                                 action_str,
                                 build_feature_snapshot(pos_dict),
+                                position_model_artifact,
+                                position_norm_artifact,
                             ),
                         )
                     except Exception as exc:
