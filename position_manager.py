@@ -142,7 +142,7 @@ class PositionManager:
         for idx, row in positions.iterrows():
             token_id = str(row.get("token_id", ""))
             quote = latest_quotes.get(token_id) or {}
-            current_price = quote.get("price")
+            current_price = quote.get("midpoint") or quote.get("last_trade_price") or quote.get("price")
             if current_price is None:
                 current_price = float(row.get("current_price", row.get("entry_price", 0.5)))
             entry_price = float(row.get("entry_price", current_price))
@@ -179,7 +179,7 @@ class PositionManager:
         entry_price = float(positions.at[idx, "entry_price"] or 0.0)
         token_id = str(positions.at[idx, "token_id"] or "") if "token_id" in positions.columns else ""
         quote = self.price_service.get_quote(token_id) if token_id else {}
-        live_price = quote.get("best_bid") or quote.get("price")
+        live_price = quote.get("best_bid") or quote.get("midpoint") or quote.get("last_trade_price") or quote.get("price")
         exit_price = float(live_price if live_price is not None else positions.at[idx, "current_price"] or entry_price)
 
         shares_closed = shares * fraction
@@ -214,7 +214,7 @@ class PositionManager:
         row = positions[mask].iloc[0].to_dict()
         token_id = str(row.get("token_id", "") or "")
         quote = self.price_service.get_quote(token_id) if token_id else {}
-        live_price = quote.get("best_bid") or quote.get("price")
+        live_price = quote.get("best_bid") or quote.get("midpoint") or quote.get("last_trade_price") or quote.get("price")
         exit_price = float(live_price if live_price is not None else row.get("current_price", row.get("entry_price", 0.5)))
         entry_price = float(row.get("entry_price", exit_price))
         size_usdc = float(row.get("size_usdc", 0.0) or 0.0)
