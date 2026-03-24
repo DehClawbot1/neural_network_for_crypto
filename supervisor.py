@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 try:
     from sb3_contrib import RecurrentPPO
@@ -25,6 +26,7 @@ from retrainer import Retrainer
 from execution_client import ExecutionClient
 from order_manager import OrderManager
 from position_manager import PositionManager
+from polytrade_env import PolyTradeEnv
 from model_inference import ModelInference
 from stage1_inference import Stage1Inference
 from stage2_temporal_inference import Stage2TemporalInference
@@ -63,12 +65,26 @@ class StatefulRecurrentBrain:
 def load_brain(model_path="weights/ppo_polytrader"):
     """Loads the trained Reinforcement Learning model."""
     recurrent_path = "weights/recurrent_ppo_polytrader"
+    vecnorm_path = "weights/ppo_polytrader_vecnormalize.pkl"
     try:
         if RecurrentPPO is not None and os.path.exists(recurrent_path + ".zip"):
             model = RecurrentPPO.load(recurrent_path)
             logging.info(f"[+] Successfully loaded recurrent RL brain from {recurrent_path}.zip")
             return StatefulRecurrentBrain(model)
-        model = PPO.load(model_path)
+
+        env = None
+        if os.path.exists(vecnorm_path):
+            try:
+                env = DummyVecEnv([lambda: PolyTradeEnv()])
+                env = VecNormalize.load(vecnorm_path, env)
+                env.training = False
+                env.norm_reward = False
+                logging.info(f"[+] Loaded RL normalization stats from {vecnorm_path}")
+            except Exception as vec_exc:
+                logging.warning(f"[!] Failed to load RL normalization stats from {vecnorm_path}: {vec_exc}")
+                env = None
+
+        model = PPO.load(model_path, env=env)
         logging.info(f"[+] Successfully loaded RL brain from {model_path}.zip")
         return model
     except Exception as e:
