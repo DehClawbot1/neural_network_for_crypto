@@ -41,10 +41,16 @@ class ContractTargetBuilder:
             return pd.DataFrame()
 
     def _select_token_id(self, signal_row, market_row):
-        side = str(signal_row.get("side", signal_row.get("outcome", signal_row.get("outcome_side", "YES")))).upper()
-        if side == "NO":
+        explicit_token_id = signal_row.get("token_id")
+        if explicit_token_id is not None and not pd.isna(explicit_token_id) and str(explicit_token_id).strip():
+            return explicit_token_id
+
+        outcome_side = str(signal_row.get("outcome_side", "")).upper().strip()
+        if outcome_side == "NO":
             return market_row.get("no_token_id")
-        return market_row.get("yes_token_id")
+        if outcome_side == "YES":
+            return market_row.get("yes_token_id")
+        return None
 
     def _compute_path_labels(self, entry_price, future_window, tp_move, sl_move):
         if future_window.empty:
