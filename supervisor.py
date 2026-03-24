@@ -263,6 +263,28 @@ def execute_paper_trade(action, signal_row, fill_price=None):
         logging.error(f"[-] Failed to write to {EXECUTION_FILE}: {e}")
 
 
+def log_live_fill_event(signal_row, fill_price, size_usdc, action_type="LIVE_TRADE"):
+    trade_record = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "market": signal_row.get("market_title", signal_row.get("market", "Unknown Market")),
+        "wallet_copied": str(signal_row.get("trader_wallet", signal_row.get("wallet_copied", "Unknown")))[:8],
+        "token_id": signal_row.get("token_id"),
+        "condition_id": signal_row.get("condition_id"),
+        "outcome_side": str(signal_row.get("outcome_side", signal_row.get("side", "UNKNOWN"))).upper(),
+        "order_side": signal_row.get("order_side", signal_row.get("trade_side", "BUY")),
+        "signal_price": round(float(signal_row.get("current_price", signal_row.get("price", fill_price)) or fill_price), 3),
+        "fill_price": round(float(fill_price), 3),
+        "size_usdc": float(size_usdc),
+        "signal_label": signal_row.get("signal_label", "UNKNOWN"),
+        "confidence": signal_row.get("confidence", 0.0),
+        "action_type": action_type,
+    }
+    try:
+        append_csv_record(EXECUTION_FILE, trade_record)
+    except Exception as e:
+        logging.error(f"[-] Failed to write live fill to {EXECUTION_FILE}: {e}")
+
+
 def main_loop():
     """The continuous autonomous loop (research + paper-trading mode)."""
     logging.info("Initializing PAPER-TRADING PolyMarket Supervisor...")
@@ -299,6 +321,8 @@ def main_loop():
 
     while True:
         try:
+            if trading_mode == "live" and order_manager is not None and hasattr(order_manager, "risk") and hasattr(order_manager.risk, "reset_failed_orders"):
+                order_manager.risk.reset_failed_orders()
             logging.info("--- Starting Research + Paper-Trading Evaluation Cycle ---")
 
             # 1. Gather public market context + public wallet activity
@@ -432,6 +456,9 @@ def main_loop():
                                     if exit_order_id:
                                         fill_result = order_manager.wait_for_fill(exit_order_id)
                                         if fill_result.get("filled"):
+                                            fill_payload = fill_result.get("response") or {}
+                                            actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                                            log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0), action_type="LIVE_EXIT")
                                             position_manager.close_position(pos_dict, reason="whale_sell_exit")
                                 else:
                                     logging.warning("Live CLOSE_LONG skipped for %s due to missing exit price/size", token_id)
@@ -485,6 +512,7 @@ def main_loop():
                             continue
                         fill_payload = fill_result.get("response") or {}
                         actual_fill_price = float(fill_payload.get("price", fill_price) or fill_price)
+                        log_live_fill_event(signal_row, actual_fill_price, size, action_type="LIVE_TRADE")
                         position_manager.open_position(signal_row, size_usdc=size, fill_price=actual_fill_price)
                     else:
                         execute_paper_trade(action_val, signal_row, fill_price=fill_price)
@@ -530,6 +558,9 @@ def main_loop():
                                 if reduce_order_id:
                                     fill_result = order_manager.wait_for_fill(reduce_order_id)
                                     if fill_result.get("filled"):
+                                        fill_payload = fill_result.get("response") or {}
+                                        actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                                        log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0) * 0.5, action_type="LIVE_REDUCE")
                                         position_manager.reduce_position(pos_dict, fraction=0.5)
                         else:
                             position_manager.reduce_position(pos_dict, fraction=0.5)
@@ -550,6 +581,9 @@ def main_loop():
                                 if exit_order_id:
                                     fill_result = order_manager.wait_for_fill(exit_order_id)
                                     if fill_result.get("filled"):
+                                        fill_payload = fill_result.get("response") or {}
+                                        actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                                        log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0), action_type="LIVE_EXIT")
                                         position_manager.close_position(pos_dict, reason="rl_exit")
                         else:
                             position_manager.close_position(pos_dict, reason="rl_exit")
@@ -593,6 +627,9 @@ def main_loop():
                         continue
                     fill_result = order_manager.wait_for_fill(exit_order_id)
                     if fill_result.get("filled"):
+                        fill_payload = fill_result.get("response") or {}
+                        actual_fill_price = float(fill_payload.get("price", exit_price) or exit_price)
+                        log_live_fill_event(pos_dict, actual_fill_price, float(pos_dict.get("size_usdc", 0.0) or 0.0), action_type="LIVE_EXIT")
                         position_manager.close_position(pos_dict, reason=f"live_{exit_reason}")
             else:
                 position_manager.apply_exit_rules(alerts_df)
