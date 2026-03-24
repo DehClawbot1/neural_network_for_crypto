@@ -20,6 +20,10 @@ class CapabilityRequest(BaseModel):
     force_new_client: bool = False
 
 
+class ScoreCheckRequest(BaseModel):
+    order_ids: list[str] = Field(default_factory=list)
+
+
 @router.get("/capabilities")
 def get_capabilities():
     return {"capabilities": list_polymarket_capabilities()}
@@ -38,6 +42,20 @@ def get_status():
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc), "supports": list_polymarket_capabilities()}
+
+
+@router.get("/health")
+def get_health():
+    try:
+        client = get_execution_client()
+        return {
+            "ok": True,
+            "exchange_ok": client.get_ok(),
+            "server_time": client.get_server_time(),
+            "credential_source": getattr(client, "credential_source", None),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/call")
@@ -64,12 +82,20 @@ def get_collateral_balance(token_id: Optional[str] = None):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.get("/orders/open")
-def get_open_orders(market: Optional[str] = None, asset_id: Optional[str] = None):
+@router.post("/balance/refresh")
+def refresh_collateral_balance(token_id: Optional[str] = None):
     try:
         client = get_execution_client()
-        result = client.get_orders(market=market, asset_id=asset_id)
-        return {"ok": True, "result": result}
+        asset_type = "CONDITIONAL" if token_id else "COLLATERAL"
+        refresh = client.update_balance_allowance(asset_type=asset_type, token_id=token_id)
+        balance = client.get_balance_allowance(asset_type=asset_type, token_id=token_id)
+        return {
+            "ok": True,
+            "asset_type": asset_type,
+            "token_id": token_id,
+            "refresh_result": refresh,
+            "balance": balance,
+        }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -80,5 +106,85 @@ def get_current_markets(next_cursor: str = "MA=="):
         client = get_execution_client()
         result = client.get_markets(next_cursor=next_cursor)
         return {"ok": True, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/orderbook/{token_id}")
+def get_orderbook(token_id: str):
+    try:
+        client = get_execution_client()
+        result = client.get_orderbook(token_id)
+        return {"ok": True, "token_id": token_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/price/{token_id}")
+def get_price(token_id: str, side: str = "BUY"):
+    try:
+        client = get_execution_client()
+        result = client.get_price(token_id, side=side)
+        return {"ok": True, "token_id": token_id, "side": side, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/spread/{token_id}")
+def get_spread(token_id: str):
+    try:
+        client = get_execution_client()
+        result = client.get_spread(token_id)
+        return {"ok": True, "token_id": token_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/orders/open")
+def get_open_orders(market: Optional[str] = None, asset_id: Optional[str] = None):
+    try:
+        client = get_execution_client()
+        result = client.get_orders(market=market, asset_id=asset_id)
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/order/{order_id}")
+def get_order(order_id: str):
+    try:
+        client = get_execution_client()
+        result = client.get_order(order_id)
+        return {"ok": True, "order_id": order_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/order/{order_id}/cancel")
+def cancel_order(order_id: str):
+    try:
+        client = get_execution_client()
+        result = client.cancel_order(order_id)
+        return {"ok": True, "order_id": order_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/order-scoring/{order_id}")
+def get_order_scoring(order_id: str):
+    try:
+        client = get_execution_client()
+        result = client.is_order_scoring(order_id)
+        return {"ok": True, "order_id": order_id, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/order-scoring/batch")
+def get_orders_scoring(request: ScoreCheckRequest):
+    try:
+        client = get_execution_client()
+        result = client.are_orders_scoring(request.order_ids)
+        return {"ok": True, "order_ids": request.order_ids, "result": result}
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
