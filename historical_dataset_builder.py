@@ -29,7 +29,9 @@ class HistoricalDatasetBuilder:
     def build(self):
         raw_candidates_df = self._safe_read("raw_candidates.csv")
         signals_df = self._safe_read("signals.csv")
-        trades_df = self._safe_read("daily_summary.txt")
+        trades_df = self._safe_read("execution_log.csv")
+        if trades_df.empty:
+            trades_df = self._safe_read("daily_summary.txt")
         markets_df = self._safe_read("markets.csv")
         alerts_df = self._safe_read("alerts.csv")
         wallet_alpha_history_df = self._safe_read("wallet_alpha_history.csv")
