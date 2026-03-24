@@ -304,6 +304,9 @@ def main_loop():
     if entry_brain is None and position_brain is None and legacy_brain is None:
         logging.warning("No RL brain available. Continuing with supervised-first ranking path.")
 
+    entry_model_name = "ppo_entry_policy" if entry_brain is not None else "ppo_polytrader_legacy_entry" if legacy_brain is not None else "no_rl_entry"
+    position_model_name = "ppo_position_policy" if position_brain is not None else "ppo_polytrader_legacy_position" if legacy_brain is not None else "no_rl_position"
+
     feature_builder = FeatureBuilder()
     signal_engine = SignalEngine()
     model_inference = ModelInference()
@@ -496,7 +499,7 @@ def main_loop():
                         "INSERT INTO model_decisions (token_id, model_name, score, action) VALUES (?, ?, ?, ?)",
                         (
                             token_id,
-                            "stage3_hybrid_v1",
+                            entry_model_name,
                             float(signal_row.get("confidence", 0.0) or 0.0),
                             action_map.get(action_val, "UNKNOWN"),
                         ),
@@ -560,7 +563,7 @@ def main_loop():
                     try:
                         db.execute(
                             "INSERT INTO model_decisions (token_id, model_name, score, action) VALUES (?, ?, ?, ?)",
-                            (token_id, "ppo_polytrader_management", float(pos_dict.get("confidence", 0.5) or 0.5), action_str),
+                            (token_id, position_model_name, float(pos_dict.get("confidence", 0.5) or 0.5), action_str),
                         )
                     except Exception as exc:
                         logging.warning("Failed to log management decision for %s: %s", token_id, exc)
